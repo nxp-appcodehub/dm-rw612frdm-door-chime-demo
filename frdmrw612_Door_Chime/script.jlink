@@ -1,0 +1,7 @@
+ExitOnError 1
+r
+h
+loadfile "C:\Users\nxg06116\repos\Doorbell_FRDM_Port\dm-rw612frdm-door-chime-demo\frdmrw612_Door_Chime\Debug\frdmrw612_Door_Chime.hex"
+qc
+
+qc

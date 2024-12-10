@@ -1,0 +1,19 @@
+NXP Software Content Register
+
+Package:                    dm-rw612frdm-door-chime-demo
+
+Version:                    1.0
+Outgoing License:           LA_OPT_Online Code Hosting NXP_Software_License - v1.2 October 2023 
+License file:               License.txt
+Description and comments:   Demo Application  shows how to implement a wireless door chime with the RW612-FRDM board.							
+                            The chime is controlled over Wi-Fi with the MQTT application protocol. 
+                            Chime sound data is streamed on the I2S pins of the RW612-FRDM Arduino header. 
+                            An external codec and also an amplifier are required to play the sound on an external speaker.                          
+Release Location:           https://github.com/nxp-appcodehub/dm-rw612frdm-door-chime-demo
+Origin:                     NXP (BSD-3-clause)
+                            NXP (Proprietary)
+                            CMSIS v5.9.0(Apache-2.0) - https://github.com/ARM-software/CMSIS_5/releases/tag/5.9.0
+                            FreeRTOS v11.0.1 (MIT) - https://github.com/FreeRTOS/FreeRTOS-Kernel
+                            lwip v2024-02-19 - http://savannah.nongnu.org/projects/lwip	
+                            freertos-addons v1.6.1 Michael Becker (MIT) - https://github.com/michaelbecker/freertos-addons
+                            wifi_tx_pwr_limits v1.0.0 Murata Manufacturing Co., LTD (BSD-3-clause)

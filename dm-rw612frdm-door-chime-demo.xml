@@ -1,0 +1,26 @@
+<data:item xmlns:data="data" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="data ../../xsd/alp.xsd" id="dm-rw612frdm-door-chime-demo" type="demo" format="projectfile" versionSchema="1.0.0" name="RW612FRDM Door chime demo">
+    <display_title>
+        RW612-FRDM Door chime demo with MQTT over Wi-Fi and I2S audio output
+    </display_title>
+    <overview>
+        <![CDATA[This demo shows how to implement a wireless door chime with the RW612-FRDM board. <br />The chime is controlled over Wi-Fi with the MQTT application protocol. Chime sound data is streamed on the I2S pins of the RW612-FRDM Arduino header. An external codec and also an amplifier are required to play the sound on an external speaker.]]>
+    </overview>
+    <toolchains>
+        <toolchain name="mcux"></toolchain>
+    </toolchains>
+    <families>
+        <family name="rw"></family>
+    </families>
+    <nxp_compatible_hw>
+        <hw id="FRDM-RW612"></hw>
+    </nxp_compatible_hw>
+    <peripherals>
+        <peripheral name="i2s"></peripheral>
+    </peripherals>
+    <categories>
+        <category name="audio"></category>
+        <category name="networking"></category>
+        <category name="rtos"></category>
+        <category name="wireless_connectivity"></category>
+    </categories>
+</data:item>
