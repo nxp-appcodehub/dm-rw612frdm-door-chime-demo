@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
- * Copyright 2016-2023 NXP
- *
+ * Copyright 2016-2023, 2025 NXP
+ * All rights reserved.
  *
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -11,9 +11,10 @@
  * Includes
  ******************************************************************************/
 #include "lwip/tcpip.h"
+#include "board.h"
 #include "pin_mux.h"
 #include "clock_config.h"
-#include "board.h"
+#include "app.h"
 #include "wpl.h"
 #include "timers.h"
 
@@ -23,7 +24,6 @@
 #include <stdio.h>
 
 #include "FreeRTOS.h"
-
 #include "fsl_power.h"
 
 #include "doorbell_sound.h"
@@ -35,13 +35,12 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-
 #ifndef AP_SSID
-#define AP_SSID "piap"
+#define AP_SSID "MySSID"
 #endif
 
 #ifndef AP_PASSWORD
-#define AP_PASSWORD "austin00"
+#define AP_PASSWORD "MyPassword"
 #endif
 
 #define WIFI_NETWORK_LABEL "my_wifi"
@@ -53,6 +52,7 @@
 /*******************************************************************************
  * Code
  ******************************************************************************/
+
 /* Link lost callback */
 static void LinkStatusChangeCallback(bool linkState)
 {
@@ -94,9 +94,15 @@ static void ConnectTo()
     			WPL_GetIP(ip, 1);
     		}
     	}while(result != WPLRET_SUCCESS);
+        PRINTF("Connecting as client to ssid: %s with password %s\r\n", AP_SSID, AP_PASSWORD);
+        result = WPL_Join(WIFI_NETWORK_LABEL);
     }
-    else {
-    	PRINTF("[!] Failed to add network to WPL - ssid: %s passphrase: %s\r\n", AP_SSID, AP_PASSWORD);
+
+    else
+    {
+        PRINTF("[i] Connected to Wi-Fi\r\nssid: %s\r\n[!]passphrase: %s\r\n", AP_SSID, AP_PASSWORD);
+        char ip[16];
+        WPL_GetIP(ip, 1);
     }
 }
 
@@ -138,8 +144,6 @@ static void main_task(void *arg)
     vTaskDelete(NULL);
 }
 
-
-
 /*!
  * @brief Main function.
  */
@@ -170,14 +174,16 @@ int main(void)
         BOARD_SetFlexspiClock(FLEXSPI, 2U, 2U);
     }
     BOARD_InitDebugConsole();
-    /* Init the doorbell sound engine */
-    DoorbellSound_Init();
+
     /* Reset GMDA */
     RESET_PeripheralReset(kGDMA_RST_SHIFT_RSTn);
     /* Keep CAU sleep clock here. */
     /* CPU1 uses Internal clock when in low power mode. */
     POWER_ConfigCauInSleep(false);
     BOARD_InitSleepPinConfig();
+
+    /* Init the doorbell sound engine */
+    DoorbellSound_Init();
 
     /* Create the main Task */
     if (xTaskCreate(main_task, "main_task", 1024, NULL, configMAX_PRIORITIES - 4, NULL) != pdPASS)

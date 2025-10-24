@@ -348,6 +348,7 @@ void wlan_add_ext_capa_info_ie(IN mlan_private *pmpriv, IN BSSDescriptor_t *pbss
         pext_cap->ext_cap.TDLSSupport = 1;
     }
 
+#if (CONFIG_WNM_PS)
     if ((((mlan_private *)mlan_adap->priv[0])->wnm_set == true) && (pbss_desc != MNULL) &&
         (pbss_desc->pext_cap->ext_cap.WNM_Sleep == true))
     {
@@ -357,14 +358,21 @@ void wlan_add_ext_capa_info_ie(IN mlan_private *pmpriv, IN BSSDescriptor_t *pbss
     {
         pext_cap->ext_cap.WNM_Sleep = 0;
     }
+#endif
 #if CONFIG_11AX
+#if CONFIG_MULTI_BSSID_SUPPORT
     if (pbss_desc && pbss_desc->multi_bssid_ap)
         SET_EXTCAP_MULTI_BSSID(pext_cap->ext_cap);
+#endif
     if (wlan_check_11ax_twt_supported(pmpriv, pbss_desc))
         SET_EXTCAP_TWT_REQ(pext_cap->ext_cap);
 #endif
 #if CONFIG_11V
     pext_cap->ext_cap.BSS_Transition = 1;
+#endif
+#if CONFIG_11MC
+    pext_cap->ext_cap.FTMI          = 1;
+    pext_cap->ext_cap.CivicLocation = 1;
 #endif
 
     *pptlv_out += sizeof(MrvlIETypes_ExtCap_t);
@@ -448,7 +456,7 @@ static mlan_status wlan_rate_ioctl_set_rate_index(IN pmlan_adapter pmadapter, IN
         bitmap_rates[9] = 0x3FFF;
 #if CONFIG_11AC
         /* [10..17] VHT */
-#ifdef RW610
+#if defined(RW610) || defined(IW610)
         /* RW610 only supports VHT MCS0 ~ MCS8*/
         bitmap_rates[10] = 0x01FF; /* 9 Bits valid */
         /* RW610 only supports 1 NSS*/
@@ -468,7 +476,7 @@ static mlan_status wlan_rate_ioctl_set_rate_index(IN pmlan_adapter pmadapter, IN
 #endif
 #if CONFIG_11AX
         /* [18..25] HE */
-#ifdef RW610
+#if defined(RW610) || defined(IW610)
         /* RW610 only supports HE MCS0 ~ MCS9*/
         bitmap_rates[18] = 0x03FF; /* 10 Bits valid */
         /* RW610 only supports 1 NSS*/
@@ -705,6 +713,43 @@ mlan_status wlan_cmd_802_11_net_monitor(IN pmlan_private pmpriv,
 }
 #endif
 
+#if CONFIG_WPA_SUPP_P2P
+/**
+ *  @brief Set/Get wifi_direct_mode
+ *
+ *  @param pmadapter	A pointer to mlan_adapter structure
+ *  @param pioctl_req	A pointer to ioctl request buffer
+ *
+ *  @return		MLAN_STATUS_SUCCESS --success, otherwise fail
+ */
+mlan_status wlan_bss_ioctl_wifi_direct_mode(IN pmlan_adapter pmadapter, IN pmlan_ioctl_req pioctl_req)
+{
+    mlan_status ret  = MLAN_STATUS_SUCCESS;
+    mlan_ds_bss *bss = MNULL;
+
+    t_u16 cmd_action     = 0;
+    mlan_private *pmpriv = pmadapter->priv[pioctl_req->bss_index];
+
+    ENTER();
+
+    bss = (mlan_ds_bss *)pioctl_req->pbuf;
+
+    if (pioctl_req->action == MLAN_ACT_SET)
+        cmd_action = HostCmd_ACT_GEN_SET;
+    else
+        cmd_action = HostCmd_ACT_GEN_GET;
+
+    /* Send request to firmware */
+    ret = wlan_prepare_cmd(pmpriv, HOST_CMD_WIFI_DIRECT_MODE_CONFIG, cmd_action, 0, (t_void *)pioctl_req,
+                           &bss->param.wfd_mode);
+
+    if (ret == MLAN_STATUS_SUCCESS)
+        ret = MLAN_STATUS_PENDING;
+
+    LEAVE();
+    return ret;
+}
+#endif
 
 #ifdef WLAN_LOW_POWER_ENABLE
 /**

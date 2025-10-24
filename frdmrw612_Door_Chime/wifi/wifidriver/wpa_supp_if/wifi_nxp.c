@@ -42,8 +42,6 @@ static int wifi_nxp_wpa_supp_set_mac_addr(void *if_priv, const t_u8 *addr)
 const rtos_wpa_supp_dev_ops wpa_supp_ops = {
     .init                     = wifi_nxp_wpa_supp_dev_init,
     .deinit                   = wifi_nxp_wpa_supp_dev_deinit,
-    .hapd_init                = wifi_nxp_hostapd_dev_init,
-    .hapd_deinit              = wifi_nxp_hostapd_dev_deinit,
     .set_mac_addr             = wifi_nxp_wpa_supp_set_mac_addr,
     .scan2                    = wifi_nxp_wpa_supp_scan2,
     .set_default_scan_ies     = wifi_nxp_wpa_supp_set_default_scan_ies,
@@ -64,7 +62,13 @@ const rtos_wpa_supp_dev_ops wpa_supp_ops = {
     .send_mlme                = wifi_nxp_wpa_send_mlme,
     .remain_on_channel        = wifi_nxp_wpa_supp_remain_on_channel,
     .cancel_remain_on_channel = wifi_nxp_wpa_supp_cancel_remain_on_channel,
+    .probe_req_report         = wifi_nxp_wpa_supp_probe_req_report,
     .get_survey_results       = wifi_nxp_wpa_supp_survey_results_get,
+    .dpp_listen               = wifi_nxp_wpa_dpp_listen,
+    .get_modes                = wifi_nxp_wpa_get_modes,
+#if CONFIG_HOSTAPD
+    .hapd_init                = wifi_nxp_hostapd_dev_init,
+    .hapd_deinit              = wifi_nxp_hostapd_dev_deinit,
     .set_modes                = wifi_nxp_hostapd_set_modes,
     .do_acs                   = wifi_nxp_hostapd_do_acs,
     .set_ap                   = wifi_nxp_hostapd_set_ap,
@@ -76,8 +80,7 @@ const rtos_wpa_supp_dev_ops wpa_supp_ops = {
     .set_frag                 = wifi_nxp_hostapd_set_frag,
     .stop_ap                  = wifi_nxp_hostapd_stop_ap,
     .set_acl                  = wifi_nxp_hostapd_set_acl,
-    .dpp_listen               = wifi_nxp_wpa_dpp_listen,
-    .get_modes                = wifi_nxp_wpa_get_modes,
+#endif /* CONFIG_HOSTAPD */
 };
 
 static void wifi_nxp_event_proc_scan_start(void *if_ctx)
@@ -135,6 +138,7 @@ static const wifi_nxp_callbk_fns_t supp_callbk_fns = {
     .remain_on_channel_callbk_fn   = wifi_nxp_event_reamin_on_channel,
     .mgmt_rx_callbk_fn             = wifi_nxp_wpa_supp_event_proc_mgmt_rx,
     .eapol_rx_callbk_fn            = wifi_nxp_wpa_supp_event_proc_eapol_rx,
+    .signal_change_callbk_fn       = wifi_nxp_wpa_supp_event_signal_change,
     .ecsa_complete_callbk_fn       = wifi_nxp_wpa_supp_event_proc_ecsa_complete,
     .dfs_cac_started_callbk_fn     = wifi_nxp_wpa_supp_event_proc_dfs_cac_started,
     .dfs_cac_finished_callbk_fn    = wifi_nxp_wpa_supp_event_proc_dfs_cac_finished,
@@ -148,6 +152,10 @@ int wifi_supp_init(void)
 {
     int ret = -WM_FAIL;
     char sta_iface_name[NETIF_NAMESIZE], uap_iface_name[NETIF_NAMESIZE];
+#if CONFIG_WPA_SUPP_P2P
+    char wfd_iface_name[NETIF_NAMESIZE];
+#endif
+
     struct netif *iface = NULL;
 
     if (wifi_supp_init_done != 0U)
@@ -192,6 +200,7 @@ int wifi_supp_init(void)
 
     (void)net_get_if_name_netif(sta_iface_name, iface);
 
+#if UAP_SUPPORT
     g_wifi_if_ctx_rtos = (struct wifi_nxp_ctx_rtos *)OSA_MemoryAllocate(sizeof(struct wifi_nxp_ctx_rtos));
 
     if (!g_wifi_if_ctx_rtos)
@@ -215,6 +224,31 @@ int wifi_supp_init(void)
 #endif
 
     (void)net_get_if_name_netif(uap_iface_name, iface);
+#endif
+
+#if CONFIG_WPA_SUPP_P2P
+    g_wifi_if_ctx_rtos = (struct wifi_nxp_ctx_rtos *)OSA_MemoryAllocate(sizeof(struct wifi_nxp_ctx_rtos));
+
+    if (!g_wifi_if_ctx_rtos)
+    {
+        wifi_e("Interface ctx alloc failed.");
+        goto out;
+    }
+
+    wm_wifi.if_priv_wfd = (void *)g_wifi_if_ctx_rtos;
+
+    iface = net_get_wfd_interface();
+
+    if (iface == NULL)
+    {
+        wifi_e("net_get_wfd_interface failed. status code %d", ret);
+        goto out;
+    }
+
+    netif_set_client_data(iface, LWIP_NETIF_CLIENT_DATA_INDEX_MAX, (void *)&wpa_supp_ops);
+
+    (void)net_get_if_name_netif(wfd_iface_name, iface);
+#endif
 
     ret = start_wpa_supplicant(sta_iface_name);
 
@@ -262,6 +296,15 @@ void wifi_supp_deinit(void)
         OSA_MemoryFree(wm_wifi.hapd_if_priv);
         wm_wifi.hapd_if_priv = NULL;
     }
+
+#if CONFIG_WPA_SUPP_P2P
+    if (wm_wifi.if_priv_wfd)
+    {
+        OSA_MemoryFree(wm_wifi.if_priv_wfd);
+        wm_wifi.if_priv_wfd = NULL;
+    }
+#endif
+
     wifi_supp_init_done = 0U;
 }
 

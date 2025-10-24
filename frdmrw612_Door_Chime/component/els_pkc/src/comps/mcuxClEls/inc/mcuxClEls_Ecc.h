@@ -6,9 +6,9 @@
 /* By expressly accepting such terms or by downloading, installing,         */
 /* activating and/or otherwise using the software, you are agreeing that    */
 /* you have read, and that you agree to comply with and are bound by, such  */
-/* license terms. If you do not agree to be bound by the applicable license */
-/* terms, then you may not retain, install, activate or otherwise use the   */
-/* software.                                                                */
+/* license terms.  If you do not agree to be bound by the applicable        */
+/* license terms, then you may not retain, install, activate or otherwise   */
+/* use the software.                                                        */
 /*--------------------------------------------------------------------------*/
 
 /**
@@ -90,11 +90,11 @@ extern "C" {
  * @ingroup mcuxClEls_Ecc_Macros
  * @{
  */
-#define MCUXCLELS_ECC_HASHED                     ((uint32_t) 0U) ///< Set this option at #mcuxClEls_EccSignOption_t.echashchl or #mcuxClEls_EccVerifyOption_t.echashchl to specify input is the hash of the message
-#define MCUXCLELS_ECC_NOT_HASHED                 ((uint32_t) 1U) ///< Set this option at #mcuxClEls_EccSignOption_t.echashchl or #mcuxClEls_EccVerifyOption_t.echashchl to specify input is the plain message
+#define MCUXCLELS_ECC_HASHED                     (0U) ///< Set this option at #mcuxClEls_EccSignOption_t.echashchl or #mcuxClEls_EccVerifyOption_t.echashchl to specify input is the hash of the message
+#define MCUXCLELS_ECC_NOT_HASHED                 (1U) ///< Set this option at #mcuxClEls_EccSignOption_t.echashchl or #mcuxClEls_EccVerifyOption_t.echashchl to specify input is the plain message
 
-#define MCUXCLELS_ECC_RTF                        ((uint32_t) 1U) ///< Set this option at #mcuxClEls_EccSignOption_t.signrtf to include the RTF in the signature
-#define MCUXCLELS_ECC_NO_RTF                     ((uint32_t) 0U) ///< Set this option at #mcuxClEls_EccSignOption_t.signrtf to not include the RTF in the signature
+#define MCUXCLELS_ECC_RTF                        (1U) ///< Set this option at #mcuxClEls_EccSignOption_t.signrtf to include the RTF in the signature
+#define MCUXCLELS_ECC_NO_RTF                     (0U) ///< Set this option at #mcuxClEls_EccSignOption_t.signrtf to not include the RTF in the signature
 /**
  * @}
  */

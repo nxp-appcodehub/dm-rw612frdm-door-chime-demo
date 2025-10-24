@@ -2,7 +2,7 @@
  *
  *  @brief  This file provides the handling of CMD/EVENT in MLAN
  *
- *  Copyright 2008-2023 NXP
+ *  Copyright 2008-2024 NXP
  *
  *  SPDX-License-Identifier: BSD-3-Clause
  *
@@ -113,12 +113,14 @@ mlan_status wlan_cmd_enh_power_mode(pmlan_private pmpriv,
         psmode_enh->params.ps_bitmap = wlan_cpu_to_le16(ps_bitmap);
         cmd->size                    = wlan_cpu_to_le16(S_DS_GEN + AUTO_PS_FIX_SIZE);
     }
+#if (CONFIG_WNM_PS)
     else if (cmd_action == DIS_WNM_PS)
     {
         psmode_enh->action           = (ENH_PS_MODES)(wlan_cpu_to_le16(DIS_WNM_PS));
         psmode_enh->params.ps_bitmap = wlan_cpu_to_le16(ps_bitmap);
         cmd->size                    = wlan_cpu_to_le16(S_DS_GEN + AUTO_PS_FIX_SIZE);
     }
+#endif
     else if (cmd_action == GET_PS)
     {
         psmode_enh->action           = (ENH_PS_MODES)(wlan_cpu_to_le16(GET_PS));
@@ -132,7 +134,10 @@ mlan_status wlan_cmd_enh_power_mode(pmlan_private pmpriv,
         cmd->size                             = wlan_cpu_to_le16(S_DS_GEN + sizeof(t_u16) + sizeof(ext_ps_param));
         psmode_enh->params.ext_param.param.header.type = wlan_cpu_to_le16(TLV_TYPE_PS_EXT_PARAM);
         psmode_enh->params.ext_param.param.header.len  = sizeof(t_u32);
-        psmode_enh->params.ext_param.param.mode        = wlan_cpu_to_le32(*((t_u32 *)pdata_buf));
+        if (pdata_buf != NULL)
+        {
+            psmode_enh->params.ext_param.param.mode        = wlan_cpu_to_le32(*((t_u32 *)pdata_buf));
+        }
     }
     else if (cmd_action == EN_AUTO_PS)
     {
@@ -174,12 +179,8 @@ mlan_status wlan_cmd_enh_power_mode(pmlan_private pmpriv,
             }
             auto_ds->deep_sleep_timeout = wlan_cpu_to_le16(idletime);
         }
-        /* fixme :
-         * This macro is not defined as if now
-         * once full fledged support is added in the SDK
-         * for UAP this macro will be defined and
-         * line below will be uncommented*/
-        /* #if defined(UAP_SUPPORT)*/
+
+#if UAP_SUPPORT
         if ((pdata_buf != MNULL) && (ps_bitmap & (BITMAP_UAP_INACT_PS | BITMAP_UAP_DTIM_PS)))
         {
             mlan_ds_ps_mgmt *ps_mgmt                   = (mlan_ds_ps_mgmt *)pdata_buf;
@@ -210,9 +211,10 @@ mlan_status wlan_cmd_enh_power_mode(pmlan_private pmpriv,
                 tlv += (t_u8)sizeof(MrvlIEtypes_inact_sleep_param_t);
             }
         }
-        /*#endif*/
+#endif
         cmd->size = wlan_cpu_to_le16(cmd_size);
     }
+#if (CONFIG_WNM_PS)
     else if (cmd_action == EN_WNM_PS)
     {
         psmode_enh->action                   = wlan_cpu_to_le16(EN_WNM_PS);
@@ -244,6 +246,7 @@ mlan_status wlan_cmd_enh_power_mode(pmlan_private pmpriv,
         }
         cmd->size = wlan_cpu_to_le16(cmd_size);
     }
+#endif
     else
     { /* Do Nothing */
     }
@@ -261,10 +264,16 @@ mlan_status wlan_ret_802_11_tx_rate_query(IN pmlan_private pmpriv, IN HostCmd_DS
     ENTER();
 
     pmpriv->tx_rate = resp->params.tx_rate.tx_rate;
+#if CONFIG_11N
     pmpriv->tx_htinfo = resp->params.tx_rate.ht_info;
+#endif
     if (!pmpriv->is_data_rate_auto)
     {
+#if CONFIG_11N
         pmpriv->data_rate = wlan_index_to_data_rate(pmadapter, pmpriv->tx_rate, pmpriv->tx_htinfo);
+#else
+        pmpriv->data_rate = wlan_index_to_data_rate(pmadapter, pmpriv->tx_rate, 0);
+#endif
     }
 
     if (pioctl)
@@ -275,9 +284,11 @@ mlan_status wlan_ret_802_11_tx_rate_query(IN pmlan_private pmpriv, IN HostCmd_DS
 #if 0
             if(rate->param.rate_cfg.rate_type == MLAN_RATE_INDEX) {
 #endif
+#if CONFIG_11N
             if (pmpriv->tx_htinfo & MBIT(0))
                 rate->param.rate_cfg.rate = pmpriv->tx_rate + MLAN_RATE_INDEX_MCS0;
             else
+#endif
                 /* For HostCmd_CMD_802_11_TX_RATE_QUERY, there is a hole in rate table
                  * between HR/DSSS and OFDM rates, so minus 1 for OFDM rate index */
                 rate->param.rate_cfg.rate =
@@ -285,13 +296,18 @@ mlan_status wlan_ret_802_11_tx_rate_query(IN pmlan_private pmpriv, IN HostCmd_DS
 #if 0
             }
             else {
+#if CONFIG_11N
                     rate->param.rate_cfg.rate = wlan_index_to_data_rate(pmadapter, pmpriv->tx_rate,
                                                 pmpriv->tx_htinfo);
+#else
+                    rate->param.rate_cfg.rate = wlan_index_to_data_rate(pmadapter, pmpriv->tx_rate, 0);
+#endif
             }
 #endif
         }
         else if (rate->sub_command == WIFI_DS_GET_DATA_RATE)
         {
+#if CONFIG_11N
             if (pmpriv->tx_htinfo & MBIT(0))
             {
                 rate->param.data_rate.tx_data_rate = pmpriv->tx_rate + MLAN_RATE_INDEX_MCS0;
@@ -305,10 +321,12 @@ mlan_status wlan_ret_802_11_tx_rate_query(IN pmlan_private pmpriv, IN HostCmd_DS
                     rate->param.data_rate.tx_gi = MLAN_HT_LGI;
             }
             else
+#endif
                 /* For HostCmd_CMD_802_11_TX_RATE_QUERY, there is a hole in rate table
                    between HR/DSSS and OFDM rates, so minus 1 for OFDM rate index */
                 rate->param.data_rate.tx_data_rate =
                     (pmpriv->tx_rate > MLAN_RATE_INDEX_OFDM0) ? pmpriv->tx_rate - 1 : pmpriv->tx_rate;
+#if CONFIG_11N
             if (pmpriv->rxpd_htinfo & MBIT(0))
             {
                 rate->param.data_rate.rx_data_rate = pmpriv->rxpd_rate + MLAN_RATE_INDEX_MCS0;
@@ -322,6 +340,7 @@ mlan_status wlan_ret_802_11_tx_rate_query(IN pmlan_private pmpriv, IN HostCmd_DS
                     rate->param.data_rate.rx_gi = MLAN_HT_LGI;
             }
             else
+#endif
                 /* For rate index in RxPD, there is a hole in rate table
                    between HR/DSSS and OFDM rates, so minus 1 for OFDM rate index */
                 rate->param.data_rate.rx_data_rate =
@@ -385,12 +404,14 @@ mlan_status wlan_ret_802_11_tx_rate_query(IN pmlan_private pmpriv, IN HostCmd_DS
             }
             else
 #endif
+#if CONFIG_11N
                 if ((mlan_rate_format)(pmpriv->tx_rate_info & 0x3U) == MLAN_RATE_FORMAT_HT)
             {
                 /* HT rate */
                 rate->param.rate_cfg.rate = pmpriv->tx_rate + MLAN_RATE_INDEX_MCS0;
             }
             else
+#endif
             {
                 /* LG rate */
                 /* For HostCmd_CMD_802_11_TX_RATE_QUERY,
@@ -443,6 +464,7 @@ mlan_status wlan_ret_802_11_tx_rate_query(IN pmlan_private pmpriv, IN HostCmd_DS
             }
             else
 #endif
+#if CONFIG_11N
                 if ((mlan_rate_format)(pmpriv->tx_rate_info & 0x3U) == MLAN_RATE_FORMAT_HT)
             {
                 /* HT rate */
@@ -459,6 +481,7 @@ mlan_status wlan_ret_802_11_tx_rate_query(IN pmlan_private pmpriv, IN HostCmd_DS
                     );
             }
             else
+#endif
             {
                 /* LG rate */
                 rate->param.data_rate.tx_rate_format = MLAN_RATE_FORMAT_LG;
@@ -501,6 +524,7 @@ mlan_status wlan_ret_802_11_tx_rate_query(IN pmlan_private pmpriv, IN HostCmd_DS
             }
             else
 #endif
+#if CONFIG_11N
                 if ((pmpriv->rxpd_rate_info & 0x3) == MLAN_RATE_FORMAT_HT)
             {
                 /* HT rate */
@@ -517,6 +541,7 @@ mlan_status wlan_ret_802_11_tx_rate_query(IN pmlan_private pmpriv, IN HostCmd_DS
                     );
             }
             else
+#endif
             {
                 /* LG rate */
                 rate->param.data_rate.rx_rate_format = MLAN_RATE_FORMAT_LG;
@@ -556,8 +581,10 @@ mlan_status wlan_cmd_tx_rate_cfg(IN pmlan_private pmpriv,
     HostCmd_DS_TX_RATE_CFG *rate_cfg = (HostCmd_DS_TX_RATE_CFG *)&cmd->params.tx_rate_cfg;
     MrvlRateScope_t *rate_scope;
     MrvlRateDropPattern_t *rate_drop;
+#if CONFIG_11AX
     MrvlIETypes_rate_setting_t *rate_setting_tlv;
     mlan_ds_rate *ds_rate = MNULL;
+#endif
     t_u16 *pbitmap_rates  = (t_u16 *)pdata_buf;
 
     t_u32 i;
@@ -640,6 +667,7 @@ mlan_status wlan_cmd_tx_rate_cfg(IN pmlan_private pmpriv,
     cmd->size = wlan_cpu_to_le16(S_DS_GEN + sizeof(HostCmd_DS_TX_RATE_CFG) + sizeof(MrvlRateScope_t) +
                                  sizeof(MrvlRateDropPattern_t));
 
+#if CONFIG_11AX
     if (pioctl_buf)
     {
         ds_rate          = (mlan_ds_rate *)pioctl_buf->pbuf;
@@ -651,6 +679,7 @@ mlan_status wlan_cmd_tx_rate_cfg(IN pmlan_private pmpriv,
         cmd->size = wlan_cpu_to_le16(S_DS_GEN + sizeof(HostCmd_DS_TX_RATE_CFG) + sizeof(MrvlRateScope_t) +
                                      sizeof(MrvlRateDropPattern_t) + sizeof(MrvlIETypes_rate_setting_t));
     }
+#endif
 
     LEAVE();
     return MLAN_STATUS_SUCCESS;
@@ -1029,7 +1058,7 @@ mlan_status wlan_ret_get_hw_spec(IN pmlan_private pmpriv, IN HostCmd_DS_COMMAND 
     MrvlIEtypesHeader_t *tlv = MNULL;
 #if CONFIG_11AX
     MrvlIEtypes_Extension_t *ext_tlv = MNULL;
-#ifdef RW610
+#if defined(RW610) || defined(IW610)
     int he_tlv_idx = 0;
 #endif
 #endif
@@ -1037,8 +1066,12 @@ mlan_status wlan_ret_get_hw_spec(IN pmlan_private pmpriv, IN HostCmd_DS_COMMAND 
     ENTER();
 
     pmadapter->fw_cap_info = wlan_le32_to_cpu(hw_spec->fw_cap_info);
+#if defined(IW610)
+    pmadapter->board_type = hw_spec->board_type;
+#endif
     /* Get no 5G status to check whether need to disable 5G */
     wlan_get_no_5G_status(pmpriv, resp);
+#ifdef STA_SUPPORT
     if ((IS_SUPPORT_MULTI_BANDS(pmadapter)) != 0U)
     {
         pmadapter->fw_bands = (t_u16)GET_FW_DEFAULT_BANDS(pmadapter);
@@ -1122,6 +1155,7 @@ mlan_status wlan_ret_get_hw_spec(IN pmlan_private pmpriv, IN HostCmd_DS_COMMAND 
     {
         /* Do nothing */
     }
+#endif /* STA_SUPPORT */
 
     pmadapter->fw_release_number = hw_spec->fw_release_number;
     pmadapter->number_of_antenna = wlan_le16_to_cpu(hw_spec->number_of_antenna);
@@ -1136,6 +1170,12 @@ mlan_status wlan_ret_get_hw_spec(IN pmlan_private pmpriv, IN HostCmd_DS_COMMAND 
     if (pmpriv->curr_addr[0] == 0xffU)
     {
         (void)__memmove(pmadapter, pmpriv->curr_addr, hw_spec->permanent_addr, MLAN_MAC_ADDR_LENGTH);
+#if CONFIG_WPA_SUPP_P2P
+        (void)__memmove(pmadapter, pmadapter->priv[2]->curr_p2p_addr, hw_spec->permanent_addr, MLAN_MAC_ADDR_LENGTH);
+        pmadapter->priv[2]->curr_p2p_addr[0] |= (0x01 << 1);
+        (void)__memmove(pmadapter, pmadapter->priv[2]->curr_addr, pmadapter->priv[2]->curr_p2p_addr,
+                        MLAN_MAC_ADDR_LENGTH);
+#endif
     }
 
     pmadapter->hw_dot_11n_dev_cap     = wlan_le32_to_cpu(hw_spec->dot_11n_dev_cap);
@@ -1210,6 +1250,7 @@ mlan_status wlan_ret_get_hw_spec(IN pmlan_private pmpriv, IN HostCmd_DS_COMMAND 
         ret = MLAN_STATUS_FAILURE;
         goto done;
     }
+#ifdef STA_SUPPORT
     if (wlan_11d_set_universaltable(pmpriv, pmadapter->fw_bands) != MLAN_STATUS_SUCCESS)
     {
         if (pioctl_req != MNULL)
@@ -1219,6 +1260,7 @@ mlan_status wlan_ret_get_hw_spec(IN pmlan_private pmpriv, IN HostCmd_DS_COMMAND 
         ret = MLAN_STATUS_FAILURE;
         goto done;
     }
+#endif /* STA_SUPPORT */
     left_len = resp->size - (t_u16)sizeof(HostCmd_DS_GET_HW_SPEC) - (t_u16)S_DS_GEN;
     tlv      = (MrvlIEtypesHeader_t *)(void *)((t_u8 *)(&resp->params) + sizeof(HostCmd_DS_GET_HW_SPEC));
     while (left_len > sizeof(MrvlIEtypesHeader_t))
@@ -1234,7 +1276,7 @@ mlan_status wlan_ret_get_hw_spec(IN pmlan_private pmpriv, IN HostCmd_DS_COMMAND 
                 {
                     ext_tlv->type = tlv_type;
                     ext_tlv->len  = tlv_len;
-#ifndef RW610
+#if !defined(RW610) && !defined(IW610)
                     wlan_update_11ax_cap(pmadapter, (MrvlIEtypes_Extension_t *)ext_tlv);
 #else
                     if ((he_tlv_idx == AX_2G_TLV_INDEX) || !ISSUPP_NO5G(pmadapter->fw_cap_ext))
@@ -1260,7 +1302,7 @@ mlan_status wlan_ret_get_hw_spec(IN pmlan_private pmpriv, IN HostCmd_DS_COMMAND 
         tlv = (MrvlIEtypesHeader_t *)(void *)((t_u8 *)tlv + tlv_len + sizeof(MrvlIEtypesHeader_t));
     }
 
-#if defined(SD8987) || defined(SD9177)
+#if defined(SD8987) || defined(SD9177) || defined(IW610)
     pmadapter->cmd_tx_data = IS_FW_SUPPORT_CMD_TX_DATA(pmadapter) ? 0x01 : 0x00;
 #endif
 
@@ -1430,6 +1472,62 @@ mlan_status wlan_cmd_region_power_cfg(pmlan_private pmpriv,
 }
 #endif
 
+#if CONFIG_WPA_SUPP_P2P
+/**
+ *  @brief This function prepares command of wifi direct mode.
+ *
+ *  @param pmpriv       A pointer to mlan_private structure
+ *  @param cmd          A pointer to HostCmd_DS_COMMAND structure
+ *  @param cmd_action   The action: GET or SET
+ *  @param pdata_buf    A pointer to data buffer
+ *
+ *  @return             MLAN_STATUS_SUCCESS
+ */
+mlan_status wlan_cmd_wifi_direct_mode(IN pmlan_private pmpriv,
+                                      IN HostCmd_DS_COMMAND *cmd,
+                                      IN t_u16 cmd_action,
+                                      IN t_void *pdata_buf)
+{
+    HostCmd_DS_WIFI_DIRECT_MODE *wfd_mode = &cmd->params.wifi_direct_mode;
+    t_u16 mode                            = *((t_u16 *)pdata_buf);
+    ENTER();
+    cmd->size        = wlan_cpu_to_le16((sizeof(HostCmd_DS_WIFI_DIRECT_MODE)) + S_DS_GEN);
+    cmd->command     = wlan_cpu_to_le16(HOST_CMD_WIFI_DIRECT_MODE_CONFIG);
+    wfd_mode->action = wlan_cpu_to_le16(cmd_action);
+    if (cmd_action == HostCmd_ACT_GEN_SET)
+        wfd_mode->mode = wlan_cpu_to_le16(mode);
+
+    LEAVE();
+    return MLAN_STATUS_SUCCESS;
+}
+
+/**
+ *  @brief This function handles the command response of wifi direct mode
+ *
+ *  @param pmpriv       A pointer to mlan_private structure
+ *  @param resp         A pointer to HostCmd_DS_COMMAND
+ *  @param pioctl_buf   A pointer to mlan_ioctl_req structure
+ *
+ *  @return             MLAN_STATUS_SUCCESS
+ */
+mlan_status wlan_ret_wifi_direct_mode(IN pmlan_private pmpriv,
+                                      IN HostCmd_DS_COMMAND *resp,
+                                      IN mlan_ioctl_req *pioctl_buf)
+{
+    HostCmd_DS_WIFI_DIRECT_MODE *wfd_mode = &resp->params.wifi_direct_mode;
+    mlan_ds_bss *bss                      = MNULL;
+
+    ENTER();
+    if (pioctl_buf)
+    {
+        bss                           = (mlan_ds_bss *)pioctl_buf->pbuf;
+        bss->param.wfd_mode           = wlan_le16_to_cpu(wfd_mode->mode);
+        pioctl_buf->data_read_written = sizeof(mlan_ds_bss);
+    }
+    LEAVE();
+    return MLAN_STATUS_SUCCESS;
+}
+#endif
 
 #if CONFIG_RX_ABORT_CFG
 /**
@@ -2132,7 +2230,7 @@ mlan_status wlan_process_vdll_event(pmlan_private pmpriv, t_u8 *pevent)
         case VDLL_IND_TYPE_ERR_ID:
             wevt_d("VDLL_IND (ID ERR).");
             break;
-#if defined(SD9177)
+#if defined(SD9177) || defined(IW610)
         case VDLL_IND_TYPE_ERR_SECURE:
             wevt_d("VDLL_IND (SECURE ERR).");
             break;
@@ -2329,6 +2427,7 @@ mlan_status wlan_cmd_tx_frame(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd, t_u
     t_u16 data_len                          = tx_frame->data_len;
 
     ENTER();
+
     cmd->command         = wlan_cpu_to_le16(HostCmd_CMD_802_11_TX_FRAME);
     cmd_size             = sizeof(HostCmd_DS_80211_TX_FRAME) + S_DS_GEN;
     tx_frame_cmd->action = 0;

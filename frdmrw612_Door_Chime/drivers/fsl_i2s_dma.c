@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
- * Copyright 2016-2022 NXP
- *
+ * Copyright 2016-2022, 2024 NXP
+ * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -74,13 +74,8 @@ static void I2S_AddTransferDMA(I2S_Type *base, i2s_dma_handle_t *handle);
  * Variables
  ******************************************************************************/
 /*<! @brief Allocate DMA transfer descriptors. */
-#if (defined(CPU_MIMXRT685SEVKA_dsp) || defined(CPU_MIMXRT685SFVKB_dsp))
 AT_NONCACHEABLE_SECTION_ALIGN(static dma_descriptor_t s_DmaDescriptors[DMA_DESCRIPTORS * FSL_FEATURE_SOC_I2S_COUNT],
                               FSL_FEATURE_DMA_LINK_DESCRIPTOR_ALIGN_SIZE);
-#else
-SDK_ALIGN(static dma_descriptor_t s_DmaDescriptors[DMA_DESCRIPTORS * FSL_FEATURE_SOC_I2S_COUNT],
-          FSL_FEATURE_DMA_LINK_DESCRIPTOR_ALIGN_SIZE);
-#endif
 
 /*<! @brief Buffer with dummy TX data. */
 SDK_ALIGN(static uint32_t s_DummyBufferTx, 4U);
@@ -154,7 +149,7 @@ static uint32_t I2S_GetInstance(I2S_Type *base)
 
     for (i = 0U; i < ARRAY_SIZE(s_I2sBaseAddrs); i++)
     {
-        if ((uint32_t)base == s_I2sBaseAddrs[i])
+        if (MSDK_REG_SECURE_ADDR((uint32_t)base) == MSDK_REG_SECURE_ADDR(s_I2sBaseAddrs[i]))
         {
             return i;
         }
@@ -264,7 +259,7 @@ status_t I2S_TxTransferSendDMA(I2S_Type *base, i2s_dma_handle_t *handle, i2s_tra
     I2S_AddTransferDMA(base, handle);
     I2S_EnableDMAInterrupts(handle);
 
-    return kStatus_Success;
+    return status;
 }
 
 /*!
@@ -405,27 +400,43 @@ static void I2S_RxEnableDMA(I2S_Type *base, bool enable)
     }
 }
 
+
 static uint16_t I2S_GetTransferBytes(i2s_dma_handle_t *handle, volatile i2s_transfer_t *transfer)
 {
     assert(transfer != NULL);
 
-    uint16_t transferBytes;
+    uint16_t transferBytes = 0;
+    uint32_t halfSize = 0;
+    uint32_t maxTransferSize = DMA_MAX_TRANSFER_COUNT * (uint32_t)handle->bytesPerFrame;
 
-    if (transfer->dataSize >= (2UL * (DMA_MAX_TRANSFER_COUNT * handle->bytesPerFrame)))
+    if (transfer->dataSize >= (2UL * maxTransferSize))
     {
-        transferBytes = ( DMA_MAX_TRANSFER_COUNT * handle->bytesPerFrame);
+        transferBytes = (maxTransferSize > UINT16_MAX) ? UINT16_MAX : (uint16_t)maxTransferSize;
     }
-    else if (transfer->dataSize > ( DMA_MAX_TRANSFER_COUNT * handle->bytesPerFrame))
+    else if (transfer->dataSize > maxTransferSize)
     {
-        transferBytes = (uint16_t)(transfer->dataSize / 2U);
-        if ((transferBytes % 4U) != 0U)
+        halfSize = transfer->dataSize / 2U;
+
+        if (halfSize > UINT16_MAX)
         {
-            transferBytes -= (transferBytes % 4U);
+            transferBytes = UINT16_MAX;
+        }
+        else
+        {
+            transferBytes = (uint16_t)halfSize;
+
+            // Ensure 4-byte alignment with overflow protection
+            uint16_t alignmentRemainder = transferBytes % 4U;
+            if (alignmentRemainder > 0)
+            {
+                // Ensure subtraction won't cause underflow
+                transferBytes = (transferBytes >= alignmentRemainder) ? (transferBytes - alignmentRemainder) : 0U;
+            }
         }
     }
     else
     {
-        transferBytes = (uint16_t)transfer->dataSize;
+        transferBytes = (transfer->dataSize > UINT16_MAX) ? UINT16_MAX : (uint16_t)transfer->dataSize;
     }
 
     return transferBytes;
@@ -644,6 +655,11 @@ static status_t I2S_StartTransferDMA(I2S_Type *base, i2s_dma_handle_t *handle)
     uint32_t xferConfig                     = 0U;
     uint32_t *srcAddr = NULL, *destAddr = NULL, srcInc = 4UL, destInc = 4UL;
 
+    if (transferBytes > transfer->dataSize)
+    {
+        transferBytes = (uint16_t)transfer->dataSize;
+    }
+
     if (handle->state == (uint32_t)kI2S_DmaStateTx)
     {
         srcAddr  = (uint32_t *)(uint32_t)transfer->data;
@@ -808,9 +824,17 @@ void I2S_DMACallback(dma_handle_t *handle, void *userData, bool transferDone, ui
     if (privateHandle->dmaDescriptorsUsed > 0U)
     {
         /* Finished descriptor, decrease amount of data to be processed */
-
-        i2sHandle->i2sQueue[queueDriverIndex].dataSize -= enqueueBytes;
-        i2sHandle->i2sQueue[queueDriverIndex].data                      = (uint8_t *)(queueDataAddr + enqueueBytes);
+        if (enqueueBytes <= i2sHandle->i2sQueue[queueDriverIndex].dataSize)
+        {
+            i2sHandle->i2sQueue[queueDriverIndex].dataSize -= enqueueBytes;
+            i2sHandle->i2sQueue[queueDriverIndex].data = (uint8_t *)(queueDataAddr + enqueueBytes);
+        }
+        else
+        {
+            /* Handle error: enqueueBytes is larger than remaining dataSize */
+            i2sHandle->i2sQueue[queueDriverIndex].dataSize = 0U;
+            i2sHandle->i2sQueue[queueDriverIndex].data = NULL;
+        }
         privateHandle->enqueuedBytes[privateHandle->enqueuedBytesStart] = 0U;
         privateHandle->enqueuedBytesStart = (privateHandle->enqueuedBytesStart + 1U) % DMA_DESCRIPTORS;
         privateHandle->dmaDescriptorsUsed--;

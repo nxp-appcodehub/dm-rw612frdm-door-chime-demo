@@ -2,7 +2,6 @@
  * Copyright 2021 NXP
  *
  *
- *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -283,9 +282,14 @@ hal_imumc_status_t HAL_ImumcExitLowpower(hal_imumc_handle_t handle);
 #elif defined(CPU2)
 #define IMU_TASK_PRIORITY (2U)
 #else
+#ifndef configMAX_PRIORITIES
+#define IMU_TASK_PRIORITY (6U)
+#else
 #define IMU_TASK_PRIORITY                                                                                       \
-    (6U) /* makesure the calculated priority of HAL_ImuMainCpu13 task is the same with tcp/ip task(priority 2), \
+    (PRIORITY_RTOS_TO_OSA((configMAX_PRIORITIES - 3)))
+    /* makesure the calculated priority of HAL_ImuMainCpu13 task is the same with tcp/ip task(priority 2), \
             otherwise the throughput of udp rx will be very low */
+#endif
 #endif
 #endif
 
@@ -325,10 +329,14 @@ hal_imumc_status_t HAL_ImumcExitLowpower(hal_imumc_handle_t handle);
 #define IMUMC_TXQ23_ENTRY_MASK (IMUMC_TXQ23_BUFSIZE - 1U)
 
 #if defined(CONFIG_IMU_GDMA) && (CONFIG_IMU_GDMA == 1)
+//#ifdef CONFIG_IMU_GDMA
 #define IMU_GDMA_ENABLE (1U)
+
 #else
+
 #define IMU_GDMA_ENABLE (0U)
 #endif
+      
 /*! @brief IMU initialization state. */
 enum imu_init_state_t
 {

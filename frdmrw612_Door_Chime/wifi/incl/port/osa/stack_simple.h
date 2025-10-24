@@ -1,9 +1,12 @@
-/****************************************************************************
- *
+/*
  *  Copyright (c) 2023, Michael Becker (michael.f.becker@gmail.com)
- *
- *  This file is part of the FreeRTOS Add-ons project.
- *
+ *  Copyright 2023-2024 NXP
+ */
+/*!\file stack_simple.h
+ *\brief This file is part of the FreeRTOS Add-ons project.
+ */
+
+/*
  *  Source Code:
  *  https://github.com/michaelbecker/freertos-addons
  *
@@ -36,7 +39,7 @@
  *  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  *  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
- ***************************************************************************/
+ */
 
 #ifndef STACK_H_
 #define STACK_H_

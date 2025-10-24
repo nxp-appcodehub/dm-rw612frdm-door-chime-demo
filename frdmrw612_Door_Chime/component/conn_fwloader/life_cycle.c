@@ -1,12 +1,12 @@
 /*
  * Copyright 2020 - 2021 NXP
  *
- *
  * SPDX-License-Identifier: BSD-3-Clause
  *
  */
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "life_cycle.h"
 #include "fusemap.h"
 
@@ -31,7 +31,7 @@ uint32_t get_lifecycle_state(void)
     uint32_t lifeCycleStateRedundantOtpShadow = OTP_LCS_REDUNDANT_FUSE_VALUE();
     if (lifeCycleStateOtpShadow != lifeCycleStateRedundantOtpShadow)
     {
-        while (1)
+        while (true)
         {
             ; /* No necessary actions. */
         }

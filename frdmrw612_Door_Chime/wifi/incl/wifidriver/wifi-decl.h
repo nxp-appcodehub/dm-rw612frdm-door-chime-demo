@@ -4,11 +4,9 @@
  *  SPDX-License-Identifier: BSD-3-Clause
  *
  */
-
-/*! \file wifi-decl.h
- * \brief Wifi structure declarations
+/*!\file wifi-decl.h
+ *\brief This file provieds Wi-Fi structure declarations
  */
-
 #ifndef __WIFI_DECL_H__
 #define __WIFI_DECL_H__
 
@@ -20,7 +18,7 @@
 #include <wifi_events.h>
 
 /* fixme: remove these after complete integration with mlan */
-#define MLAN_MAC_ADDR_LENGTH (6U)
+#define MLAN_MAC_ADDR_LENGTH 6U
 /** Version string buffer length */
 #define MLAN_MAX_VER_STR_LEN 128
 
@@ -38,10 +36,12 @@
 #define OWE_TRANS_MODE_OWE 2U
 #endif
 
+#if CONFIG_WIFI_CAPA
 #define WIFI_SUPPORT_11AX   (1 << 3)
 #define WIFI_SUPPORT_11AC   (1 << 2)
 #define WIFI_SUPPORT_11N    (1 << 1)
 #define WIFI_SUPPORT_LEGACY (1 << 0)
+#endif
 
 #if 0
 /** channel_field.flags */
@@ -157,6 +157,11 @@ typedef struct
 /** BSS type : UAP */
 #define BSS_TYPE_UAP 1U
 
+#if CONFIG_WPA_SUPP_P2P
+/** BSS type : WFD */
+#define BSS_TYPE_WFD 2U
+#endif
+
 #define UAP_DEFAULT_CHANNEL       0
 #define UAP_DEFAULT_BANDWIDTH     2
 #define UAP_DEFAULT_BEACON_PERIOD 100
@@ -245,8 +250,6 @@ typedef struct
     uint32_t wpa3_sae : 1;
     /** 802.1x */
     uint32_t wpa2_entp : 1;
-    /** 802.1x sha256 */
-    uint32_t wpa2_entp_sha256 : 1;
     /** FT 802.1x */
     uint32_t ft_1x : 1;
     /** FT 802.1x sha384 */
@@ -255,6 +258,8 @@ typedef struct
     uint32_t ft_psk : 1;
     /** FT SAE */
     uint32_t ft_sae : 1;
+    /** WPA3 Enterprise */
+    uint32_t wpa3_entp : 1;
     /** WPA3 802.1x sha256 */
     uint32_t wpa3_1x_sha256 : 1;
     /** WPA3 802.1x sha384 */
@@ -308,6 +313,10 @@ struct wifi_scan_result2
 #if CONFIG_11AX
     /** 11AX HE capab support */
     bool phecap_ie_present;
+#if CONFIG_11AX_TWT
+    /** 11AX TWT capab support */
+    bool twt_capab;
+#endif
 #endif
 
     bool wmm_ie_present;                       /*!< WMM IE present info */
@@ -925,6 +934,18 @@ typedef struct
     int16_t bcn_nf_avg;
 } wifi_rssi_info_t;
 
+#if CONFIG_WIFI_CHANNEL_LOAD
+typedef PACK_START struct
+{
+    t_u16 action;
+    t_u16 ch_load;
+    t_s16 noise;
+    t_u16 rx_quality;
+    t_u16 duration;
+    t_u16 cca_th; /* not using cca_th in v18 */
+} PACK_END wifi_802_11_chan_load_t;
+#endif
+
 /**
  * Data structure for subband set
  *
@@ -1067,7 +1088,7 @@ typedef PACK_START struct
     /** Number of Channels */
     t_u8 num_chans;
     /** TRPC config */
-#if defined(SD9177)
+#if defined(SD9177) || defined(IW610)
     wifi_txpwrlimit_config_t txpwrlimit_config[43];
 #else
     wifi_txpwrlimit_config_t txpwrlimit_config[40];
@@ -1151,6 +1172,10 @@ typedef PACK_START struct
     t_u16 twt_mantissa;
     /** TWT Request Type, 0: REQUEST_TWT, 1: SUGGEST_TWT*/
     t_u8 twt_request;
+    /** TWT Setup State. Set to 0 by driver, filled by FW in response*/
+    t_u8 twt_setup_state;
+    /** TWT link lost timeout threshold */
+    t_u16 bcnMiss_threshold;
 } PACK_END wifi_twt_setup_config_t;
 
 /** Wi-Fi Teardown Configuration */
@@ -1159,35 +1184,42 @@ typedef PACK_START struct
     /** TWT Flow Identifier. Range: [0-7] */
     t_u8 flow_identifier;
     /** Negotiation Type. 0: Future Individual TWT SP start time, 1: Next
-     * Wake TBTT time */
+     * Wake TBTT time, 3：Broadcast TWT */
     t_u8 negotiation_type;
     /** Tear down all TWT. 1: To teardown all TWT, 0 otherwise */
     t_u8 teardown_all_twt;
 } PACK_END wifi_twt_teardown_config_t;
 
-/** Wi-Fi BTWT Configuration */
+/** Wi-Fi Broadcast TWT AP config */
+#define BTWT_AGREEMENT_MAX 5
 typedef PACK_START struct
 {
-    /** Only support 1: Set*/
-    t_u16 action;
-    /** Broadcast TWT AP config */
-    t_u16 sub_id;
+    /** BTWT ID */
+    t_u8 btwt_id;
+    /** BTWT Mantissa */
+    t_u16 bcast_mantissa;
+    /** BTWT Exponent */
+    t_u8 bcast_exponent;
     /** Range 64-255 */
     t_u8 nominal_wake;
-    /** Max STA Support */
-    t_u8 max_sta_support;
-    /** TWT Mantissa */
-    t_u16 twt_mantissa;
-    /** TWT Offset */
-    t_u16 twt_offset;
-    /** TWT Exponent */
-    t_u8 twt_exponent;
-    /** SP Gap */
-    t_u8 sp_gap;
+} PACK_END btwt_set_t;
+/** BTWT AP Config parameters */
+typedef PACK_START struct
+{
+    /** Reserved */
+    t_u8 bcast_bet_sta_wait;
+    /** Reserved */
+    t_u16 bcast_offset;
+    /** Reserved */
+    t_u8 bcast_twtli;
+    /** Count of BTWT agreement sets */
+    t_u8 count;
+    /** BTWT agreement sets */
+    btwt_set_t btwt_sets[BTWT_AGREEMENT_MAX];
 } PACK_END wifi_btwt_config_t;
 
 #define WLAN_BTWT_REPORT_LEN     9
-#define WLAN_BTWT_REPORT_MAX_NUM 4
+#define WLAN_BTWT_REPORT_MAX_NUM 6
 /** Wi-Fi TWT Report Configuration */
 typedef PACK_START struct
 {
@@ -1270,6 +1302,7 @@ typedef PACK_START struct
 {
     /** Frame control flags */
     uint8_t frame_ctrl_flags;
+	/** time interval */
     uint16_t duration;
     /** Destination MAC address */
     char dest[MLAN_MAC_ADDR_LENGTH];
@@ -1277,15 +1310,19 @@ typedef PACK_START struct
     char src[MLAN_MAC_ADDR_LENGTH];
     /** BSSID */
     char bssid[MLAN_MAC_ADDR_LENGTH];
+	/** Fragment number of frame fragments */
     uint16_t seq_frag_num;
-    /** Timestamp */
+    /** Beacon timestamp */
     uint8_t timestamp[8];
+	/** Beacon interval, Send periodically at Beacon time intervals, typically abbreviated as TU, representing 1024 microseconds */
     uint16_t beacon_interval;
+	/** capability info, when sending beacon signals, it is used to notify all parties of the performance of the network */
     uint16_t cap_info;
+	/** element identification code */
     uint8_t ssid_element_id;
     /** SSID Length */
     uint8_t ssid_len;
-    /* SSID */
+    /** SSID string */
     char ssid[MLAN_MAX_SSID_LENGTH];
 } PACK_END wifi_beacon_info_t;
 
@@ -1294,17 +1331,46 @@ typedef PACK_START struct
 {
     /** Frame control flags */
     uint8_t frame_ctrl_flags;
+	/** data time interval */
     uint16_t duration;
+	/** basic service set identifier */
     char bssid[MLAN_MAC_ADDR_LENGTH];
     /** Source MAC address */
     char src[MLAN_MAC_ADDR_LENGTH];
     /** Destination MAC address */
     char dest[MLAN_MAC_ADDR_LENGTH];
+	/** sequence frage number */
     uint16_t seq_frag_num;
     /** QOS control */
     uint16_t qos_ctrl;
 } PACK_END wifi_data_info_t;
 #endif
+
+#if HOST_TXRX_MGMT_FRAME
+/** host tx frame params structure */
+typedef PACK_START struct
+{
+    /** Packet Length */
+    t_u16 frm_len;
+    /** Frame Control */
+    t_u16 frm_ctl;
+    /** Duration ID */
+    t_u16 duration_id;
+    /** Address1 */
+    t_u8 addr1[MLAN_MAC_ADDR_LENGTH];
+    /** Address2 */
+    t_u8 addr2[MLAN_MAC_ADDR_LENGTH];
+    /** Address3 */
+    t_u8 addr3[MLAN_MAC_ADDR_LENGTH];
+    /** Sequence Control */
+    t_u16 seq_ctl;
+    /** Address4 */
+    t_u8 addr4[MLAN_MAC_ADDR_LENGTH];
+    /** Frame payload */
+    t_u8 payload[];
+} PACK_END wifi_host_tx_frame_params_t;
+#endif
+
 /** Wifi frame types */
 typedef enum
 {
@@ -1353,7 +1419,6 @@ typedef struct
     uint8_t mfpc;
     uint8_t mfpr;
 } wifi_pmf_params_t;
-
 
 /** Channel scan parameters */
 typedef struct
@@ -1441,7 +1506,9 @@ typedef PACK_START struct _wifi_scan_channel_list_t
 #define ANT_DETECT_MAX_CHANNEL_LIST 50U
 #endif
 #define MAX_CHANNEL_LIST 6
+#if CONFIG_COMBO_SCAN
 #define MAX_NUM_SSID 2
+#endif
 /** V2 scan parameters */
 typedef PACK_START struct _wifi_scan_params_v2_t
 {
@@ -1456,7 +1523,11 @@ typedef PACK_START struct _wifi_scan_params_v2_t
     /** BSSID to scan */
     t_u8 bssid[MLAN_MAC_ADDR_LENGTH];
     /** SSID to scan */
+#if CONFIG_COMBO_SCAN
     char ssid[MAX_NUM_SSID][MLAN_MAX_SSID_LENGTH + 1];
+#else
+    char ssid[MLAN_MAX_SSID_LENGTH + 1];
+#endif
     /** Number of channels */
     t_u8 num_channels;
     /** Channel list with channel information */
@@ -1471,8 +1542,10 @@ typedef PACK_START struct _wifi_scan_params_v2_t
     /** Threshold of rssi */
     t_s16 rssi_threshold;
 #endif
+#if CONFIG_SCAN_CHANNEL_GAP
     /** scan channel gap */
     t_u16 scan_chan_gap;
+#endif
     /** Callback to be called when scan is completed */
     int (*cb)(unsigned int count);
 } PACK_END wifi_scan_params_v2_t;
@@ -1537,7 +1610,23 @@ typedef PACK_START struct _wifi_mfg_cmd_tx_frame
     /** STBC */
     t_u32 stbc;
     /** power id */
-    t_u32 rsvd[2];
+    t_u32 rsvd[1];
+    /**signal bw*/
+    t_u32 signal_bw;
+    /** NumPkt */
+    t_u32 NumPkt;
+    /** MaxPE */
+    t_u32 MaxPE;
+    /** BeamChange */
+    t_u32 BeamChange;
+    /** Dcm */
+    t_u32 Dcm;
+    /** Doppler */
+    t_u32 Doppler;
+    /** MidP */
+    t_u32 MidP;
+    /** QNum */
+    t_u32 QNum;
 } PACK_END wifi_mfg_cmd_tx_frame_t;
 
 /** Configuration for Manufacturing command Tx Continuous */
@@ -1749,7 +1838,7 @@ typedef struct _wifi_ds_subscribe_evt
 #endif
 
 #if CONFIG_CSI
-#define CSI_FILTER_MAX 16
+#define CSI_FILTER_MAX 16U
 /** Structure of CSI filters */
 typedef PACK_START struct _wifi_csi_filter_t
 {
@@ -1765,7 +1854,8 @@ typedef PACK_START struct _wifi_csi_filter_t
 /** Structure of CSI parameters */
 typedef PACK_START struct _wifi_csi_config_params_t
 {
-    t_u8 bss_type;
+    /** 0: station; 1: uap */
+	t_u8 bss_type;
     /** CSI enable flag. 1: enable, 2: disable */
     t_u16 csi_enable;
     /** Header ID*/

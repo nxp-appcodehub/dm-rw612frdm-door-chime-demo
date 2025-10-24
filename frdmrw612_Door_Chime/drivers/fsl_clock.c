@@ -1,6 +1,5 @@
 /*
- * Copyright 2020-2024, NXP
- *
+ * Copyright 2020-2024 NXP
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -22,8 +21,6 @@
 
 #define CLOCK_KHZ(freq) ((freq)*1000UL)
 #define CLOCK_MHZ(freq) (CLOCK_KHZ(freq) * 1000UL)
-
-#define CLOCK_DTRNG_BUSY_RETRY (100000U)
 
 /*******************************************************************************
  * Variables
@@ -118,24 +115,10 @@ static void CLOCK_DelayUs(uint32_t us)
 {
     uint32_t instNum;
 
+    assert(SystemCoreClock < (UINT32_MAX - 999999UL));
+    assert(((UINT32_MAX - 2U) / us) > ((SystemCoreClock + 999999UL) / 1000000UL));
     instNum = ((SystemCoreClock + 999999UL) / 1000000UL) * us;
     CLOCK_Delay((instNum + 2U) / 3U);
-}
-
-static void CLOCK_WaitDtrngIdle(void)
-{
-    uint32_t retry = 0U;
-
-    /* Confirm if ELS is running */
-    if (((CLKCTL0->PSCCTL0 & CLKCTL0_PSCCTL0_ELS_MASK) != 0U) &&
-        ((RSTCTL0->PRSTCTL0 & RSTCTL0_PRSTCTL0_ELS_MASK) == 0U) && ((ELS->ELS_CTRL & ELS_ELS_CTRL_ELS_EN_MASK) != 0U))
-    {
-        while (((ELS->ELS_STATUS & ELS_ELS_STATUS_DTRNG_BUSY_MASK) != 0U) && (retry < CLOCK_DTRNG_BUSY_RETRY))
-        {
-            retry++;
-            CLOCK_DelayUs(1U);
-        }
-    }
 }
 
 /*! @brief  Return Frequency of t3pll_mci_48_60m_irc
@@ -145,11 +128,11 @@ uint32_t CLOCK_GetT3PllMciIrcClkFreq(void)
 {
     uint32_t freq = 0U;
 
-    if ((SYSPLL_T3->CLKTREE_CTRL_SIX_REG & 0xFU) == 0x5U)
+    if ((SYSPLL_T3->CLKTREE_CTRL_SIX_REG & SYSPLL_T3_CLKTREE_CTRL_SIX_REG_TUNE_MCI_60MHZ_MASK) == 0x5U)
     {
         freq = CLOCK_MHZ(2560UL) / 43UL;
     }
-    else if ((SYSPLL_T3->CLKTREE_CTRL_SIX_REG & 0xFU) == 0xAU)
+    else if ((SYSPLL_T3->CLKTREE_CTRL_SIX_REG & SYSPLL_T3_CLKTREE_CTRL_SIX_REG_TUNE_MCI_60MHZ_MASK) == 0xAU)
     {
         freq = CLOCK_MHZ(2560UL) / 53UL;
     }
@@ -332,11 +315,6 @@ void CLOCK_DisableClock(clock_ip_name_t clk)
     }
     else if (((uint32_t)clk & SYS_CLK_GATE_FLAG_MASK) != 0U)
     {
-        if (clk == kCLOCK_T3PllMci256mClk)
-        {
-            /* Must wait DTRNG to be idle to avoid wrong TRNG result */
-            CLOCK_WaitDtrngIdle();
-        }
         SYSCTL2->SOURCE_CLK_GATE |= SYS_CLK_GATE_BIT_MASK(clk);
     }
     else
@@ -1251,7 +1229,7 @@ uint32_t CLOCK_InitTcpuRefClk(uint32_t targetHz, clock_tcpu_flexspi_div_t div)
         CLOCK_DeinitTcpuRefClk();
     }
 
-    SYSPLL_TCPU->TCPU_CTRL_ONE_REG = 0x74U;
+    SYSPLL_TCPU->TCPU_CTRL_ONE_REG |= SYSPLL_TCPU_TCPU_CTRL_ONE_REG_REG_TCPU_CTRL_ONE(0x3U);
     freq                           = CLOCK_CfgTcpuRefClk(targetHz, div);
 
     /* Set PDB */
@@ -1292,7 +1270,7 @@ void CLOCK_InitTddrRefClk(clock_tddr_flexspi_div_t div)
         CLOCK_DeinitTddrRefClk();
     }
 
-    REG_SYSPLL_TDDR->TDDR_CTRL_ONE_REG = 0x74U;
+    REG_SYSPLL_TDDR->TDDR_CTRL_ONE_REG |= SYSPLL_TDDR_TDDR_CTRL_ONE_REG_REG_TDDR_CTRL_ONE(0x3U);
     SYSCTL2->PLL_CTRL =
         (SYSCTL2->PLL_CTRL & ~SYSCTL2_PLL_CTRL_TDDR_FLEXSPI_CLK_SEL_MASK) | SYSCTL2_PLL_CTRL_TDDR_FLEXSPI_CLK_SEL(div);
 
@@ -1327,18 +1305,21 @@ void CLOCK_DeinitTddrRefClk(void)
  */
 void CLOCK_InitT3RefClk(clock_t3_mci_irc_config_t cnfg)
 {
+    uint8_t val;
+
     if ((SYSCTL2->PLL_CTRL & SYSCTL2_PLL_CTRL_T3_PDB_MASK) != 0U)
     {
         CLOCK_DeinitT3RefClk();
     }
 
+    val = SYSPLL_T3->CLKTREE_CTRL_SIX_REG & ~SYSPLL_T3_CLKTREE_CTRL_SIX_REG_TUNE_MCI_60MHZ_MASK;
     if (cnfg == kCLOCK_T3MciIrc60m)
     {
-        SYSPLL_T3->CLKTREE_CTRL_SIX_REG = 0x5U;
+        SYSPLL_T3->CLKTREE_CTRL_SIX_REG = val | SYSPLL_T3_CLKTREE_CTRL_SIX_REG_TUNE_MCI_60MHZ(0x5U);
     }
     else
     {
-        SYSPLL_T3->CLKTREE_CTRL_SIX_REG = 0xAU;
+        SYSPLL_T3->CLKTREE_CTRL_SIX_REG = val | SYSPLL_T3_CLKTREE_CTRL_SIX_REG_TUNE_MCI_60MHZ(0xAU);
     }
     /* Set PDB */
     SYSCTL2->PLL_CTRL |= SYSCTL2_PLL_CTRL_T3_PDB_MASK;
@@ -1355,8 +1336,6 @@ void CLOCK_DeinitT3RefClk(void)
 {
     /* Ensure SystemCoreClock is up to date for accurate CLOCK_DelayUs() */
     SystemCoreClockUpdate();
-    /* Must wait DTRNG to be idle to avoid wrong TRNG result */
-    CLOCK_WaitDtrngIdle();
     /* Gate all T3 output clocks */
     SYSCTL2->SOURCE_CLK_GATE |=
         SYSCTL2_SOURCE_CLK_GATE_T3PLL_MCI_48_60M_IRC_CG_MASK | SYSCTL2_SOURCE_CLK_GATE_T3PLL_MCI_256M_CG_MASK |

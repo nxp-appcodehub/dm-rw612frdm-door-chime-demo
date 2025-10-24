@@ -38,26 +38,17 @@ Change log:
 #endif
 #endif
 
-#ifndef __ZEPHYR__
-#if !CONFIG_WIFI_AUTO_POWER_SAVE
-#define CONFIG_WIFI_AUTO_POWER_SAVE 1
-#endif
-#endif
+#define CONFIG_GTK_REKEY_OFFLOAD 0
 
-#if !(defined(SD8801) || defined(RW610))
-#define CONFIG_GTK_REKEY_OFFLOAD 1
-#endif
 
 #if defined(SD9177)
-#define CONFIG_TCP_ACK_ENH 1
-#define CONFIG_FW_VDLL     1
-
-#if CONFIG_11AX
-#if !CONFIG_11K
-#define CONFIG_11K 1
+#define CONFIG_TCP_ACK_ENH 0
 #endif
-#if !CONFIG_11V
-#define CONFIG_11V 1
+#if defined(SD9177) || defined(IW610)
+#define CONFIG_FW_VDLL     1
+#if UAP_SUPPORT
+#if !CONFIG_WIFI_CAPA
+#define CONFIG_WIFI_CAPA 1
 #endif
 #endif
 #endif

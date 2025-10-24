@@ -37,6 +37,12 @@
  *  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  ***************************************************************************/
+/*
+ *  Copyright 2023 NXP
+ *
+ *  SPDX-License-Identifier: BSD-3-Clause
+ *
+ */
 
 #include <stdlib.h>
 #include "stack_simple.h"
@@ -49,11 +55,15 @@ void InitStack(Stack_t *Stack)
 
 void PushOnStack(Stack_t *Stack, SlNode_t *Node)
 {
-    if (!Stack)
+    if (Stack == NULL)
+    {
         return;
+    }
 
-    if (!Node)
+    if (Node == NULL)
+    {
         return;
+    }
 
     SlAddNodeToHead(&Stack->Head, Node);
     Stack->Count++;
@@ -63,8 +73,10 @@ SlNode_t *PopOffStack(Stack_t *Stack)
 {
     SlNode_t *Node;
 
-    if (!Stack)
+    if (Stack == NULL)
+    {
         return NULL;
+    }
 
     if (Stack->Count == 0)
     {

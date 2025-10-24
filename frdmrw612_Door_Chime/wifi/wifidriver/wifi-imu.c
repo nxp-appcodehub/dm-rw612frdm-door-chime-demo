@@ -138,7 +138,11 @@ void wrapper_wifi_ret_mib(void *resp);
 uint32_t dev_value1 = -1;
 uint8_t dev_mac_addr[MLAN_MAC_ADDR_LENGTH];
 uint8_t dev_mac_addr_uap[MLAN_MAC_ADDR_LENGTH];
+uint8_t dev_mac_addr_wfd[MLAN_MAC_ADDR_LENGTH];
 static uint8_t dev_fw_ver_ext[MLAN_MAX_VER_STR_LEN];
+#if CONFIG_HOST_SLEEP && CONFIG_POWER_MANAGER
+extern void wlan_hs_hanshake_cfg(bool skip);
+#endif
 
 static void wifi_init_imulink(void)
 {
@@ -173,6 +177,12 @@ static hal_imumc_status_t wifi_send_fw_cmd(t_u16 cmd_type, t_u8 *cmd_payload, t_
     {
         OSA_TimeDelay(1);
     }
+#if CONFIG_HOST_SLEEP && CONFIG_POWER_MANAGER
+    if (wakeup_by == 0)
+    {
+        wlan_hs_hanshake_cfg(false);
+    }
+#endif
     return kStatus_HAL_ImumcSuccess;
 }
 
@@ -181,6 +191,12 @@ static hal_imumc_status_t wifi_send_fw_data(t_u8 *data, t_u32 length)
     if (data == NULL || length == 0)
         return kStatus_HAL_ImumcError;
     w_pkt_d("Data TX SIG: Driver=>FW, len %d", length);
+#if CONFIG_HOST_SLEEP && CONFIG_POWER_MANAGER
+    if (wakeup_by == 0)
+    {
+        wlan_hs_hanshake_cfg(false);
+    }
+#endif
     return HAL_ImuSendTxData(kIMU_LinkCpu1Cpu3, data, length);
 }
 
@@ -208,6 +224,12 @@ int wifi_get_device_mac_addr(wifi_mac_addr_t *mac_addr)
 int wifi_get_device_uap_mac_addr(wifi_mac_addr_t *mac_addr_uap)
 {
     (void)memcpy(mac_addr_uap->mac, dev_mac_addr_uap, MLAN_MAC_ADDR_LENGTH);
+    return WM_SUCCESS;
+}
+
+int wifi_get_device_wfd_mac_addr(wifi_mac_addr_t *mac_addr_wfd)
+{
+    (void)memcpy(mac_addr_wfd->mac, dev_mac_addr_wfd, MLAN_MAC_ADDR_LENGTH);
     return WM_SUCCESS;
 }
 
@@ -463,6 +485,10 @@ mlan_status wlan_handle_cmd_resp_packet(t_u8 *pmbuf)
             {
                 wifi_get_mac_address_from_cmdresp(cmdresp, dev_mac_addr_uap);
             }
+            else if (bss_type == MLAN_BSS_TYPE_WIFIDIRECT)
+            {
+                wifi_get_mac_address_from_cmdresp(cmdresp, dev_mac_addr_wfd);
+            }
             else
             {
                 wifi_get_mac_address_from_cmdresp(cmdresp, dev_mac_addr);
@@ -476,9 +502,9 @@ mlan_status wlan_handle_cmd_resp_packet(t_u8 *pmbuf)
         case HostCmd_CMD_GET_HW_SPEC:
             wlan_ret_get_hw_spec((mlan_private *)mlan_adap->priv[0], (HostCmd_DS_COMMAND *)cmdresp, NULL);
 #ifdef RW610
+#if !defined(OVERRIDE_CALIBRATION_DATA)
             t_u32 fw_cap_ext_rw610;
             fw_cap_ext_rw610 = mlan_adap->priv[0]->adapter->fw_cap_ext;
-#if !CONFIG_CUSTOM_CALDATA
             cal_data_valid_rw610 = (((fw_cap_ext_rw610 & 0x0800) == 0) ? 0 : 1);
 #else
             cal_data_valid_rw610 = 0;
@@ -687,6 +713,7 @@ static int wlan_get_mac_addr_sta()
     return true;
 }
 
+#if UAP_SUPPORT
 static int wlan_get_mac_addr_uap()
 {
     int seq_number = 0;
@@ -706,6 +733,29 @@ static int wlan_get_mac_addr_uap()
     wifi_send_fw_cmd(HostCmd_CMD_802_11_MAC_ADDRESS, (uint8_t *)outbuf, imupkt->size);
     return true;
 }
+#endif
+
+#if CONFIG_WPA_SUPP_P2P
+static int wlan_get_mac_addr_wfd()
+{
+    int seq_number = 0;
+
+    seq_number = HostCmd_SET_SEQ_NO_BSS_INFO(0 /* seq_num */, 0 /* bss_num */, MLAN_BSS_TYPE_WIFIDIRECT);
+    (void)memset(outbuf, 0, IMU_INIT_FW_CMD_SIZE);
+
+    /* imupkt = outbuf */
+    wifi_prepare_get_mac_addr_cmd(&imupkt->hostcmd, seq_number);
+
+    imupkt->pkttype = MLAN_TYPE_CMD;
+    imupkt->size    = imupkt->hostcmd.size + INTF_HEADER_LEN;
+
+    last_cmd_sent = HostCmd_CMD_802_11_MAC_ADDRESS;
+
+    /* send CMD53 to write the command to get mac address */
+    wifi_send_fw_cmd(HostCmd_CMD_802_11_MAC_ADDRESS, (uint8_t *)outbuf, imupkt->size);
+    return true;
+}
+#endif
 
 void wifi_prepare_get_fw_ver_ext_cmd(void *cmd, int seq_number, int version_str_sel);
 static int wlan_get_fw_ver_ext(int version_str_sel)
@@ -1044,6 +1094,7 @@ static int wlan_fw_init_cfg()
         return false;
     }
 
+#if UAP_SUPPORT
     last_resp_rcvd = 0;
 
     wlan_get_mac_addr_uap();
@@ -1052,6 +1103,18 @@ static int wlan_fw_init_cfg()
     {
         return false;
     }
+#endif
+
+#if CONFIG_WPA_SUPP_P2P
+    last_resp_rcvd = 0;
+
+    wlan_get_mac_addr_wfd();
+
+    if (wlan_wait_for_last_resp_rcvd(HostCmd_CMD_802_11_MAC_ADDRESS) != true)
+    {
+        return false;
+    }
+#endif
 
     wcmdr_d("CMD : GET_FW_VER_EXT (0x97)");
 
@@ -1275,8 +1338,13 @@ mlan_status wlan_flush_wmm_pkt(int pkt_cnt)
 
     w_pkt_d("Data TX: Driver=>FW, pkt_cnt %d", pkt_cnt);
 
+#if CONFIG_HOST_SLEEP && CONFIG_POWER_MANAGER
+     if (wakeup_by == 0)
+     {
+         wlan_hs_hanshake_cfg(false);
+     }
+#endif
     ret = HAL_ImuSendMultiTxData(kIMU_LinkCpu1Cpu3);
-    ;
     if (ret != kStatus_HAL_ImumcSuccess)
     {
         wifi_io_e("wlan_flush_wmm_pkt failed (%d)", ret);
@@ -1406,6 +1474,13 @@ hal_imumc_status_t imumc_cmdrsp_handler(IMU_Msg_t *pImuMsg, uint32_t length)
         mlan_adap->wlan_wakeup.id      = *(uint16_t *)((uint8_t *)pImuMsg->PayloadPtr[0] + 4);
         POWER_ClearWakeupStatus(WL_MCI_WAKEUP0_IRQn);
     }
+#if CONFIG_POWER_MANAGER
+    /* Clear host sleep flags to enable host sleep for next low power round */
+    else if (wakeup_by == 0)
+    {
+        wlan_hs_hanshake_cfg(false);
+    }
+#endif
 #endif
 
     wlan_decode_rx_packet((t_u8 *)pImuMsg->PayloadPtr[0], MLAN_TYPE_CMD);
@@ -1428,6 +1503,13 @@ hal_imumc_status_t imumc_event_handler(IMU_Msg_t *pImuMsg, uint32_t length)
         mlan_adap->wlan_wakeup.id      = *(uint16_t *)((uint8_t *)pImuMsg->PayloadPtr[0] + 4);
         POWER_ClearWakeupStatus(WL_MCI_WAKEUP0_IRQn);
     }
+#if CONFIG_POWER_MANAGER
+    /* Clear host sleep flags to enable host sleep for next low power round */
+    else if (wakeup_by == 0)
+    {
+        wlan_hs_hanshake_cfg(false);
+    }
+#endif
 #endif
 
 #if CONFIG_CSI
@@ -1463,6 +1545,13 @@ hal_imumc_status_t imumc_rxpkt_handler(IMU_Msg_t *pImuMsg, uint32_t length)
         mlan_adap->wlan_wakeup.id      = 0;
         POWER_ClearWakeupStatus(WL_MCI_WAKEUP0_IRQn);
     }
+#if CONFIG_POWER_MANAGER
+    /* Clear host sleep flags to enable host sleep for next low power round */
+    else if (wakeup_by == 0)
+    {
+        wlan_hs_hanshake_cfg(false);
+    }
+#endif
 #endif
 
     for (i = 0; i < pImuMsg->Hdr.length; i++)
@@ -1529,6 +1618,13 @@ hal_imumc_status_t imumc_ctrl_handler(IMU_Msg_t *pImuMsg, uint32_t length)
         mlan_adap->wlan_wakeup.id      = 0;
         POWER_ClearWakeupStatus(WL_MCI_WAKEUP0_IRQn);
     }
+#if CONFIG_POWER_MANAGER
+    /* Clear host sleep flags to enable host sleep for next low power round */
+    else if (wakeup_by == 0)
+    {
+        wlan_hs_hanshake_cfg(false);
+    }
+#endif
 #endif
 
     imuControlType = pImuMsg->Hdr.sub_type;
@@ -1643,6 +1739,7 @@ retry:
 
 #ifdef RW610
     wifi_cau_temperature_enable();
+    wifi_pmip_v33_enable();
     temperature_val = wifi_cau_temperature_write_to_firmware();
     PRINTF("Wi-Fi cau temperature : %d\r\n", temperature_val);
 #endif
@@ -1714,7 +1811,7 @@ void imu_wifi_deinit(void)
 #endif
     wlan_deinit_struct();
 
-    flag = MBIT(1) | imu_fw_is_hang();
+    flag = MBIT(1) | MBIT(0);
 #if CONFIG_WIFI_RECOVERY
     flag |= wifi_recovery_enable;
 #endif
@@ -1739,7 +1836,7 @@ HostCmd_DS_COMMAND *wifi_get_command_buffer()
     return (HostCmd_DS_COMMAND *)(cmd_buf + INTF_HEADER_LEN);
 }
 
-bus_operations imu_ops = {
+bus_operations bus_ops = {
     .fw_is_hang      = imu_fw_is_hang,
     .intf_header_len = INTF_HEADER_LEN,
 };

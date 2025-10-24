@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
  * Copyright 2016-2020 NXP
- *
+ * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -27,7 +27,7 @@
 /*! @name Driver version */
 /*@{*/
 /*! @brief USART FreeRTOS driver version. */
-#define FSL_USART_FREERTOS_DRIVER_VERSION (MAKE_VERSION(2, 6, 0))
+#define FSL_USART_FREERTOS_DRIVER_VERSION (MAKE_VERSION(2, 7, 0))
 /*@}*/
 
 /*! @brief FLEX USART configuration structure */
@@ -40,6 +40,7 @@ struct rtos_usart_config
     usart_stop_bit_count_t stopbits; /*!< Number of stop bits to use */
     uint8_t *buffer;                 /*!< Buffer for background reception */
     uint32_t buffer_size;            /*!< Size of buffer for background reception */
+    bool enableHardwareFlowControl;  /*!< Enable hardware control RTS/CTS */
 };
 
 /*! @brief FLEX USART FreeRTOS handle */
@@ -56,6 +57,12 @@ typedef struct _usart_rtos_handle
     EventGroupHandle_t rxEvent; /*!< RX completion event */
     EventGroupHandle_t txEvent; /*!< TX completion event */
     void *t_state;              /*!< Transactional state of the underlying driver */
+#if (configSUPPORT_STATIC_ALLOCATION == 1)
+    StaticSemaphore_t txSemaphoreBuffer; /*!< Statically allocated memory for txSemaphore */
+    StaticSemaphore_t rxSemaphoreBuffer; /*!< Statically allocated memory for rxSemaphore */
+    StaticEventGroup_t txEventBuffer;    /*!< Statically allocated memory for txEvent */
+    StaticEventGroup_t rxEventBuffer;    /*!< Statically allocated memory for rxEvent */
+#endif
 } usart_rtos_handle_t;
 
 /*******************************************************************************

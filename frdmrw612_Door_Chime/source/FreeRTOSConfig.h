@@ -119,6 +119,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define INCLUDE_xTaskGetHandle              0
 #define INCLUDE_xTaskResumeFromISR          1
 
+/****************** Macro definitions ***************/
+
+#include "FreeRTOSConfigBoard.h"
 
 
 #if defined(__ICCARM__)||defined(__CC_ARM)||defined(__GNUC__)

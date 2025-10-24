@@ -2,7 +2,7 @@
  *
  *  @brief  This file provides functions for process 11k(RRM) feature
  *
- *  Copyright 2022 NXP
+ *  Copyright 2024-2025 NXP
  *
  *  SPDX-License-Identifier: BSD-3-Clause
  *
@@ -607,6 +607,33 @@ void wlan_add_rm_beacon_report(wlan_rrm_beacon_report_data *rep_data,
             (void)memcpy((void *)pos, (const void *)&bss_entry->wmm_ie, sizeof(bss_entry->wmm_ie));
             pos += sizeof(bss_entry->wmm_ie);
         }
+
+#if !CONFIG_WPA_SUPP
+        /* RSN Override */
+        if (bss_entry->rsno_ie_buff_len > 0U)
+        {
+            if (pos + bss_entry->rsno_ie_buff_len - *buf_pos > remained_len)
+            {
+                goto part_subelem;
+            }
+
+            (void)memcpy(pos, bss_entry->rsno_ie_buff, bss_entry->rsno_ie_buff_len);
+            pos += bss_entry->rsno_ie_buff_len;
+        }
+
+        /* RSN Override 2 */
+        if (bss_entry->rsno2_ie_buff_len > 0U)
+        {
+            if (pos + bss_entry->rsno2_ie_buff_len - *buf_pos > remained_len)
+            {
+                goto part_subelem;
+            }
+
+            (void)memcpy(pos, bss_entry->rsno2_ie_buff, bss_entry->rsno2_ie_buff_len);
+            pos += bss_entry->rsno2_ie_buff_len;
+        }
+#endif
+
         /* Others */
         if (bss_entry->vendor_ie_len > (t_u8)0U)
         {
@@ -1011,7 +1038,7 @@ void wlan_dot11k_formatRrmCapabilities(IEEEtypes_RrmEnabledCapabilities_t *pRrmC
     (void)memset((void *)pRrmCapIe, 0x00, sizeof(IEEEtypes_RrmEnabledCapabilities_t));
 
     pRrmCapIe->LinkMeas       = 1;
-    pRrmCapIe->NborRpt        = 1;
+    pRrmCapIe->NborRpt        = 0;
     pRrmCapIe->BcnPassiveMeas = 1;
     pRrmCapIe->BcnActiveMeas  = 1;
     pRrmCapIe->BcnTableMeas   = 1;
