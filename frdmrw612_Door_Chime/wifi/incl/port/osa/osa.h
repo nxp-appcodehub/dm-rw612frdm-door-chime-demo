@@ -1,3 +1,13 @@
+/*
+ *  Copyright 2024 NXP
+ *
+ *  SPDX-License-Identifier: BSD-3-Clause
+ *
+ */
+/*!\file osa.h
+ *\brief This file contains OSA wrapper declarations for timer, read/write lock and idle hook.
+*/
+
 
 #ifndef _OSA_H_
 #define _OSA_H_
@@ -9,7 +19,6 @@
 #if defined(SDK_OS_FREE_RTOS)
 #include <osa_freertos.h>
 #elif defined(FSL_RTOS_THREADX)
-#include "app_config.h"
 #include <osa_threadx.h>
 #elif (CONFIG_ZEPHYR)
 #include <osa_zephyr.h>
@@ -327,7 +336,7 @@ static inline void OSA_Srand(uint32_t seed)
  */
 static inline uint32_t OSA_Rand()
 {
-    if (wm_rand_seed == -1)
+    if (wm_rand_seed == 0xFFFFFFFFU)
         OSA_Srand(OSA_TimeGetMsec());
     wm_rand_seed = (uint32_t)((((uint64_t)wm_rand_seed * 279470273UL) % 4294967291UL) & 0xFFFFFFFFUL);
     return wm_rand_seed;

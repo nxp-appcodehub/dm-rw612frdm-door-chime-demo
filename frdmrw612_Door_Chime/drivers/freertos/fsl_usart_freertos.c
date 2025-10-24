@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
- *
+ * Copyright 2016-2024 NXP
+ * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -110,25 +110,42 @@ int USART_RTOS_Init(usart_rtos_handle_t *handle, usart_handle_t *t_handle, const
     handle->base    = cfg->base;
     handle->t_state = t_handle;
 
+#if (configSUPPORT_STATIC_ALLOCATION == 1)
+    handle->txSemaphore = xSemaphoreCreateMutexStatic(&handle->txSemaphoreBuffer);
+#else
     handle->txSemaphore = xSemaphoreCreateMutex();
+#endif
     if (NULL == handle->txSemaphore)
     {
         return kStatus_Fail;
     }
+#if (configSUPPORT_STATIC_ALLOCATION == 1)
+    handle->rxSemaphore = xSemaphoreCreateMutexStatic(&handle->rxSemaphoreBuffer);
+#else
     handle->rxSemaphore = xSemaphoreCreateMutex();
+#endif
     if (NULL == handle->rxSemaphore)
     {
         vSemaphoreDelete(handle->txSemaphore);
         return kStatus_Fail;
     }
+
+#if (configSUPPORT_STATIC_ALLOCATION == 1)
+    handle->txEvent = xEventGroupCreateStatic(&handle->txEventBuffer);
+#else
     handle->txEvent = xEventGroupCreate();
+#endif
     if (NULL == handle->txEvent)
     {
         vSemaphoreDelete(handle->rxSemaphore);
         vSemaphoreDelete(handle->txSemaphore);
         return kStatus_Fail;
     }
+#if (configSUPPORT_STATIC_ALLOCATION == 1)
+    handle->rxEvent = xEventGroupCreateStatic(&handle->rxEventBuffer);
+#else
     handle->rxEvent = xEventGroupCreate();
+#endif
     if (NULL == handle->rxEvent)
     {
         vEventGroupDelete(handle->txEvent);
@@ -142,6 +159,7 @@ int USART_RTOS_Init(usart_rtos_handle_t *handle, usart_handle_t *t_handle, const
     defcfg.parityMode   = cfg->parity;
     defcfg.enableTx     = true;
     defcfg.enableRx     = true;
+    defcfg.enableHardwareFlowControl = cfg->enableHardwareFlowControl;
 
     status = USART_Init(handle->base, &defcfg, cfg->srcclk);
     if (status != kStatus_Success)

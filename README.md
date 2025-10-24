@@ -1,5 +1,4 @@
 # NXP Application Code Hub
-
 [<img src="https://mcuxpresso.nxp.com/static/icon/nxp-logo-color.svg" width="100"/>](https://www.nxp.com)
 
 ## RW612-FRDM Door chime demo with MQTT over Wi-Fi and I2S audio output
@@ -7,15 +6,11 @@
 This demo shows how to implement a wireless door chime with the RW612-FRDM board. <br />The chime is controlled over Wi-Fi with the MQTT application protocol. Chime sound data is streamed on the I2S pins of the RW612-FRDM Arduino header. An external codec and also an amplifier are required to play the sound on an external speaker.
 
 #### Boards: FRDM-RW612
-
-#### Categories: Audio, Networking, RTOS, Wireless Connectivity
-
+#### Categories: Audio, RTOS, Networking, Wireless Connectivity
 #### Peripherals: I2S
-
 #### Toolchains: MCUXpresso IDE
 
 ## Table of Contents
-
 1. [Software](#step1)
 2. [Hardware](#step2)
 3. [Setup](#step3)
@@ -26,8 +21,8 @@ This demo shows how to implement a wireless door chime with the RW612-FRDM board
 
 ## 1. Software<a name="step1"></a>
 
-- MCUXpresso IDE v11.7.1
-- FRDM-RW612 SDK (SDK\_2\_16\_0\_FRDM-RW612)
+- MCUXpresso IDE v25.6
+- FRDM-RW612 SDK (SDK\_25\_06\_00\_FRDM-RW612)
 - [FRDM-RW612 Doorbell over Wi-Fi and MQTT Demo project](frdmrw612_Door_Chime)
 
 ## 2. Hardware<a name="step2"></a>
@@ -36,7 +31,7 @@ This demo shows how to implement a wireless door chime with the RW612-FRDM board
 
 #### Speaker
 
-[<img src = "https://api.puiaudio.com/file/05f579c6-8474-41bb-ac4a-f1b2c6788e2a.png" width = "300">](https://puiaudio.com/product/speakers-and-receivers/ASE02808MR-LW150-R)
+![Speaker](Images/speaker.png)
 
 ##### Speaker configuration:
 
@@ -62,38 +57,15 @@ Gain pin can be left unconnected for a 9dB default gain, refer to the datasheet 
 
 #### Speaker with I2S interface/amp:
 
-<li>Connect Vin pin of the speaker board into pin 10 of header J3 (5V)
-<li>Connect GND pin of the speaker board into pin 12 of header J3 (GND)
+<li>Connect Vin pin of the speaker board into pin 10 of header J3 (5V), if you are using a big speaker is recomended to connect the Vin pin
+directly into an external power source supplying the 5V to avoid any possible issue for a high current consumption.
+<li>Connect GND pin of the speaker board into pin 12 of header J3 (GND), if you are using an external power source connect the ground connector
+of the power source into the same or another ground pin of the board.
 <li>SD Pin can remain unconnected
 <li>Gain Pin can remain unconnected
 <li>Connect Din pin of the speaker board into pin 2 of header J1
 <li>Connect BCLK pin of the speaker board into pin 12 of header J2
 <li>Connect LRC pin of the speaker board into pin 4 of header J1 </li>
-
-### Flash Wi-Fi firmware
-
-The Wi-Fi firmware must be flashed once unless it is erased. It is stored at a given address. Ensure that the Wi-Fi firmware is flashed before running any Wi-Fi demo application.
-
-Open J-Link commander on Windows and connect a uUSB cable between your host PC and the MCU-link port of the RW61x board. J-Link commander is part of the[ J-Link software and documentation pack](https://www.segger.com/downloads/jlink/). **RW61x support was added to the J-Link tools in version V7.92c**.
-
-```
-J-Link>con
-Device>RW612
-TIF>
-SSpeed><Enter>
-```
-
-You can find the Wi-Fi secure firmware binary in the FRDM_RW612_SDK. Download it from the [MCUXpresso SDK Builder](https://https://mcuxpresso.nxp.com/en) (check this document's section 1 [SW](#step1) to confirm the right SDK version). Unzip the SDK file and locate the Wi-Fi firmware at **SDK_x_xx_xxxFRDM-RW612/components/conn_fwloader/fw_bin/rw61xw_raw_cpu1_a2.bin**
-
-This is the J-Link commander command to load the Wi-Fi secure firmware into the RW61x flash.
-
-```
-J-Link>loadbin rw61xw_raw_cpu1_a2.bin,0x08400000
-```
-
-The J-Flash Lite tool can also be used for this:
-
-![J-Flash Lite](Images/JFlash_wifi.png)
 
 ### Wi-Fi Access point and MQTT broker
 
@@ -194,8 +166,8 @@ Memory usage (Release config -Os)
 
 | Memory region | Used Size   | Region Size | %age Used |
 | ------------- | ----------- | ----------- | --------- |
-| QSPI_FLASH:   | 1,630,675 B | 8 MB        | 19.44%    |
-| SRAM:         | 271,652 B   | 1,216 KB    | 21.82%    |
+| QSPI_FLASH:   | 1,671,755 B | 8 MB        | 19.95%    |
+| SRAM:         | 418,404 B   | 1,216 KB    | 33.60%    |
 
 **The doorchime sound array is 1,150,624 Bytes long**
 
@@ -245,7 +217,7 @@ Questions regarding the content/correctness of this example can be entered as Is
 | Version | Description / Update                                   |                      Date |
 | :-----: | ------------------------------------------------------ | ------------------------: |
 |   1.0   | Initial release on Application Code Hub                | June 10<sup>th</sup> 2024 |
-|   1.1   | Door Chime project files added on Application Code Hub | June 18<sup>th</sup> 2024 |
+|   2.0   | Updated project to SDK v2025.06                        | Sept 29<sup>th</sup> 2024 |
 
 <small>
 <b>Trademarks and Service Marks</b>: There are a number of proprietary logos, service marks, trademarks, slogans and product designations ("Marks") found on this Site. By making the Marks available on this Site, NXP is not granting you a license to use them in any fashion. Access to this Site does not confer upon you any license to the Marks under any of NXP or any third party's intellectual property rights. While NXP encourages others to link to our URL, no NXP trademark or service mark may be used as a hyperlink without NXP’s prior written permission. The following Marks are the property of NXP. This list is not comprehensive; the absence of a Mark from the list does not constitute a waiver of intellectual property rights established by NXP in a Mark.

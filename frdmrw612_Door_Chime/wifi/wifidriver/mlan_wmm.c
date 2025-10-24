@@ -18,7 +18,7 @@ Change log:
 /* Additional WMSDK header files */
 #include <wmerrno.h>
 #include <osa.h>
-#if CONFIG_TX_RX_ZERO_COPY
+#if CONFIG_TX_RX_ZERO_COPY || FSL_USDHC_ENABLE_SCATTER_GATHER_TRANSFER
 #include <wm_net.h>
 #endif
 /* Always keep this include at the end of all include files */
@@ -143,12 +143,17 @@ t_void wlan_clean_txrx(pmlan_private priv)
 
     (void)pmadapter->callbacks.moal_spin_lock(pmadapter->pmoal_handle, priv->wmm.ra_list_spinlock);
     wlan_11n_deleteall_txbastream_tbl(priv);
+#ifdef SDIO_MULTI_PORT_TX_AGGR
+    MP_TX_AGGR_BUF_RESET(priv->adapter);
+#endif
 #if CONFIG_WMM
     wlan_ralist_del_all_enh(priv);
 #endif /* CONFIG_WMM */
     (void)__memcpy(pmadapter, tos_to_tid, ac_to_tid, sizeof(tos_to_tid));
 
+#if UAP_SUPPORT
     priv->num_drop_pkts = 0;
+#endif
     (void)pmadapter->callbacks.moal_spin_unlock(pmadapter->pmoal_handle, priv->wmm.ra_list_spinlock);
 
     LEAVE();
@@ -190,7 +195,7 @@ t_void wlan_init_wmm_param(pmlan_adapter pmadapter)
      * aifsn,ecw_max,ecw_min, tx_op_limit only when ucm is set to 1.
      * othewise the default setting/behavoir in firmware will be used.
      */
-#ifdef RW610
+#if defined(RW610) || defined(IW610)
     pmadapter->ac_params[AC_BE].aci_aifsn.acm   = 0;
     pmadapter->ac_params[AC_BE].aci_aifsn.aci   = AC_BE;
     pmadapter->ac_params[AC_BE].aci_aifsn.aifsn = 5;
@@ -275,17 +280,24 @@ t_void wlan_wmm_init(pmlan_adapter pmadapter)
             }
 
             priv->add_ba_param.timeout = MLAN_DEFAULT_BLOCK_ACK_TIMEOUT;
+#ifdef STA_SUPPORT
             if (priv->bss_type == MLAN_BSS_TYPE_STA)
             {
                 priv->add_ba_param.tx_win_size = MLAN_STA_AMPDU_DEF_TXWINSIZE;
                 priv->add_ba_param.rx_win_size = MLAN_STA_AMPDU_DEF_RXWINSIZE;
             }
+#endif
+#if UAP_SUPPORT
             if (priv->bss_type == MLAN_BSS_TYPE_UAP
+#if CONFIG_WPA_SUPP_P2P
+                || priv->bss_type == MLAN_BSS_TYPE_WIFIDIRECT
+#endif
             )
             {
                 priv->add_ba_param.tx_win_size = MLAN_UAP_AMPDU_DEF_TXWINSIZE;
                 priv->add_ba_param.rx_win_size = MLAN_UAP_AMPDU_DEF_RXWINSIZE;
             }
+#endif
             priv->add_ba_param.tx_amsdu = MTRUE;
             priv->add_ba_param.rx_amsdu = MTRUE;
             (void)__memset(priv->adapter, priv->rx_seq, 0xff, sizeof(priv->rx_seq));
@@ -325,6 +337,7 @@ raListTbl *wlan_wmm_get_ralist_node(pmlan_private priv, t_u8 tid, t_u8 *ra_addr)
 }
 
 
+#ifdef STA_SUPPORT
 
 /**
  *  @brief Call back from the command module to allow insertion of a WMM TLV
@@ -396,6 +409,7 @@ t_u32 wlan_wmm_process_association_req(pmlan_private priv,
     LEAVE();
     return ret_len;
 }
+#endif /* STA_SUPPORT */
 
 #if CONFIG_WMM
 /**
@@ -407,7 +421,7 @@ t_u32 wlan_wmm_process_association_req(pmlan_private priv,
  *  @param pdata_buf    A pointer to data buffer
  *  @return             MLAN_STATUS_SUCCESS
  */
-mlan_status wlan_cmd_wmm_param_config(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd, t_u8 cmd_action, t_void *pdata_buf)
+mlan_status wlan_cmd_wmm_param_config(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd, t_u16 cmd_action, t_void *pdata_buf)
 {
     wmm_ac_parameters_t *ac_params        = (wmm_ac_parameters_t *)pdata_buf;
     HostCmd_DS_WMM_PARAM_CONFIG *pcmd_cfg = &cmd->params.param_config;
@@ -558,12 +572,15 @@ void wifi_wmm_da_to_ra(uint8_t *da, uint8_t *ra)
 static uint8_t wifi_wmm_is_tx_pause(const uint8_t interface, mlan_wmm_ac_e queue, uint8_t *ra)
 {
     t_u8 is_tx_pause   = MFALSE;
+#if UAP_SUPPORT
     raListTbl *ra_list = MNULL;
+#endif
 
     if (interface == MLAN_BSS_TYPE_STA)
     {
         is_tx_pause = mlan_adap->priv[0]->tx_pause;
     }
+#if UAP_SUPPORT
     else if (interface == MLAN_BSS_TYPE_UAP)
     {
         if (mlan_adap->priv[1]->tx_pause == MTRUE)
@@ -583,6 +600,10 @@ static uint8_t wifi_wmm_is_tx_pause(const uint8_t interface, mlan_wmm_ac_e queue
                                                     &mlan_adap->priv[interface]->wmm.tid_tbl_ptr[queue].ra_list.plock);
         }
     }
+#else
+    (void)queue;
+    (void)ra;
+#endif
 
     return is_tx_pause;
 }
@@ -630,7 +651,7 @@ SUCC:
     mlan_adap->priv[interface]->wmm.pkts_queued[queue]--;
     ra_list->total_pkts--;
     ra_list->drop_count++;
-#if CONFIG_TX_RX_ZERO_COPY
+#if CONFIG_TX_RX_ZERO_COPY || FSL_USDHC_ENABLE_SCATTER_GATHER_TRANSFER
     /* Before replacement, need free the buffer from stack first */
     net_stack_buffer_free(buf->buffer);
 #endif
@@ -692,8 +713,21 @@ static raListTbl *wlan_wmm_get_queue_raptr_enh(pmlan_private priv, t_u8 ac, t_u8
     if (ra_list != MNULL)
         return ra_list;
 
+#if CONFIG_WPA_SUPP
+    if ((GET_BSS_ROLE(priv) == MLAN_BSS_ROLE_UAP) &&
+         (0 != memcmp(ra_addr, bcast_addr, sizeof(bcast_addr))))
+    {
+        if (MNULL == wlan_get_station_entry(priv, ra_addr))
+        {
+            PRINTM(MERROR, "Drop packets to unknow station " MACSTR "\n",  MAC2STR(ra_addr));
+            LEAVE();
+            return MNULL;
+        }
+    }
+#else
     if (GET_BSS_ROLE(priv) == MLAN_BSS_ROLE_UAP && __memcmp(priv->adapter, ra_addr, bcast_addr, MLAN_MAC_ADDR_LENGTH))
         return MNULL;
+#endif
 
     /* wlan_ralist_add_enh will hold wmm lock, so need to unlock first */
     priv->adapter->callbacks.moal_semaphore_put(priv->adapter->pmoal_handle, &priv->wmm.tid_tbl_ptr[ac].ra_list.plock);
@@ -713,13 +747,11 @@ int wlan_wmm_add_buf_txqueue_enh(const uint8_t interface, const uint8_t *buffer,
     t_u8 ra[MLAN_MAC_ADDR_LENGTH] = {0x0};
     raListTbl *ralist             = MNULL;
 
-    if (interface == MLAN_BSS_TYPE_STA)
-        priv = mlan_adap->priv[0];
-    else
-        priv = mlan_adap->priv[1];
+    CHECK_BSS_TYPE(interface, MLAN_STATUS_FAILURE);
+    priv = mlan_adap->priv[interface];
 
-        /* refer to low_level_output payload memcpy */
-#if CONFIG_TX_RX_ZERO_COPY
+    /* refer to low_level_output payload memcpy */
+#if CONFIG_TX_RX_ZERO_COPY || FSL_USDHC_ENABLE_SCATTER_GATHER_TRANSFER
     wifi_wmm_da_to_ra(&((outbuf_t *)buffer)->eth_header[0], ra);
 #else
     wifi_wmm_da_to_ra(&((outbuf_t *)buffer)->data[0], ra);
@@ -779,7 +811,7 @@ void wifi_wmm_buf_put(outbuf_t *buf)
 
     assert(mlan_adap->outbuf_pool.free_cnt < MAX_WMM_BUF_NUM);
 
-#if CONFIG_TX_RX_ZERO_COPY
+#if CONFIG_TX_RX_ZERO_COPY || FSL_USDHC_ENABLE_SCATTER_GATHER_TRANSFER
     /* Free driver's reference count for network buffer */
     net_stack_buffer_free(buf->buffer);
 #endif
@@ -1066,42 +1098,32 @@ void wlan_ralist_deinit_enh(mlan_private *priv)
 /* debug statistics */
 void wifi_wmm_drop_err_mem(const uint8_t interface)
 {
-    if (interface == MLAN_BSS_TYPE_STA)
-        mlan_adap->priv[0]->driver_error_cnt.tx_err_mem++;
-    else if (interface == MLAN_BSS_TYPE_UAP)
-        mlan_adap->priv[1]->driver_error_cnt.tx_err_mem++;
+    CHECK_BSS_TYPE_RET_VOID(interface);
+    mlan_adap->priv[interface]->driver_error_cnt.tx_err_mem++;
 }
 
 void wifi_wmm_drop_no_media(const uint8_t interface)
 {
-    if (interface == MLAN_BSS_TYPE_STA)
-        mlan_adap->priv[0]->driver_error_cnt.tx_no_media++;
-    else if (interface == MLAN_BSS_TYPE_UAP)
-        mlan_adap->priv[1]->driver_error_cnt.tx_no_media++;
+    CHECK_BSS_TYPE_RET_VOID(interface);
+    mlan_adap->priv[interface]->driver_error_cnt.tx_no_media++;
 }
 
 void wifi_wmm_drop_retried_drop(const uint8_t interface)
 {
-    if (interface == MLAN_BSS_TYPE_STA)
-        mlan_adap->priv[0]->driver_error_cnt.tx_wmm_retried_drop++;
-    else if (interface == MLAN_BSS_TYPE_UAP)
-        mlan_adap->priv[1]->driver_error_cnt.tx_wmm_retried_drop++;
+    CHECK_BSS_TYPE_RET_VOID(interface);
+    mlan_adap->priv[interface]->driver_error_cnt.tx_wmm_retried_drop++;
 }
 
 void wifi_wmm_drop_pause_drop(const uint8_t interface)
 {
-    if (interface == MLAN_BSS_TYPE_STA)
-        mlan_adap->priv[0]->driver_error_cnt.tx_wmm_pause_drop++;
-    else if (interface == MLAN_BSS_TYPE_UAP)
-        mlan_adap->priv[1]->driver_error_cnt.tx_wmm_pause_drop++;
+    CHECK_BSS_TYPE_RET_VOID(interface);
+    mlan_adap->priv[interface]->driver_error_cnt.tx_wmm_pause_drop++;
 }
 
 void wifi_wmm_drop_pause_replaced(const uint8_t interface)
 {
-    if (interface == MLAN_BSS_TYPE_STA)
-        mlan_adap->priv[0]->driver_error_cnt.tx_wmm_pause_replaced++;
-    else if (interface == MLAN_BSS_TYPE_UAP)
-        mlan_adap->priv[1]->driver_error_cnt.tx_wmm_pause_replaced++;
+    CHECK_BSS_TYPE_RET_VOID(interface);
+    mlan_adap->priv[interface]->driver_error_cnt.tx_wmm_pause_replaced++;
 }
 
 void wlan_get_bypass_lock(uint8_t interface)
@@ -1162,6 +1184,8 @@ void wlan_cleanup_bypass_txq(uint8_t interface)
 {
     bypass_outbuf_t *buf;
     pmlan_private priv = mlan_adap->priv[interface];
+
+    CHECK_BSS_TYPE_RET_VOID(interface);
 
     /*Free hold buff*/
     while (!wlan_bypass_txq_empty(interface))

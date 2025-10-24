@@ -1,5 +1,5 @@
 /*
- *  Copyright 2023 NXP
+ *  Copyright 2025 NXP
  *  All rights reserved.
  *
  *  SPDX-License-Identifier: BSD-3-Clause
@@ -62,6 +62,7 @@ static i2s_config_t s_TxConfig;
 static i2s_dma_handle_t s_TxHandle;
 static i2s_transfer_t s_TxTransfer;
 static int period_count = 0;
+volatile bool txFinished = true;
 
 /*******************************************************************************
  * Code
@@ -122,6 +123,8 @@ void BOARD_I2C_ReleaseBus(void)
 static void TxCallback(I2S_Type *base, i2s_dma_handle_t *handle, status_t completionStatus, void *userData)
 {
 
+    txFinished = true;
+
 }
 
 /*******************************************************************************
@@ -132,13 +135,8 @@ static void TxCallback(I2S_Type *base, i2s_dma_handle_t *handle, status_t comple
  */
 int DoorbellSound_Init(void)
 {
-    BOARD_I2C_ReleaseBus();
-    BOARD_InitI2CPins();
 
     CLOCK_EnableClock(kCLOCK_InputMux);
-
-    /* attach SFRO clock to I2C2 */
-    CLOCK_AttachClk(kSFRO_to_FLEXCOMM2);
 
     /* attach AUDIO PLL clock to FLEXCOMM1 (I2S1) */
     CLOCK_AttachClk(kAUDIO_PLL_to_FLEXCOMM1);
@@ -189,7 +187,20 @@ int DoorbellSound_Init(void)
 
 void DoorbellSound_Play(void)
 {
-    PRINTF("Play\r\n");
-    I2S_TxTransferSendDMA(DEMO_I2S_TX, &s_TxHandle, s_TxTransfer);
+
+	if (!txFinished)
+	{
+		PRINTF("DMA busy, wait...\r\n");
+		return;
+	}
+	txFinished = false;
+
+	PRINTF("Play\r\n");
+
+	if (I2S_TxTransferSendDMA(DEMO_I2S_TX, &s_TxHandle, s_TxTransfer) != kStatus_Success)
+	{
+		PRINTF("Transfer issue, not able to send the data.");
+	}
+
 }
 

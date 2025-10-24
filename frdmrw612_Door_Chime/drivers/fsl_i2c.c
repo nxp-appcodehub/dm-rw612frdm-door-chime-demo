@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
  * Copyright 2016-2023 NXP
- *
+ * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -189,7 +189,7 @@ uint32_t I2C_GetInstance(I2C_Type *base)
     uint32_t i;
     for (i = 0; i < (uint32_t)FSL_FEATURE_SOC_I2C_COUNT; i++)
     {
-        if ((uint32_t)base == s_i2cBaseAddrs[i])
+        if (MSDK_REG_SECURE_ADDR((uint32_t)base) == MSDK_REG_SECURE_ADDR(s_i2cBaseAddrs[i]))
         {
             break;
         }

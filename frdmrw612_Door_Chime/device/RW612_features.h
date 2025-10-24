@@ -1,13 +1,13 @@
 /*
 ** ###################################################################
 **     Version:             rev. 1.0, 2021-03-16
-**     Build:               b240325
+**     Build:               b250512
 **
 **     Abstract:
 **         Chip specific module features.
 **
 **     Copyright 2016 Freescale Semiconductor, Inc.
-**     Copyright 2016-2024 NXP
+**     Copyright 2016-2025 NXP
 **     SPDX-License-Identifier: BSD-3-Clause
 **
 **     http:                 www.nxp.com
@@ -167,7 +167,7 @@
 
 /* CDOG module features */
 
-/* @brief CDOG Has No Reset */
+/* @brief SOC has no reset driver. */
 #define FSL_FEATURE_CDOG_HAS_NO_RESET (1)
 /* @brief CDOG Load default configurations during init function */
 #define FSL_FEATURE_CDOG_NEED_LOAD_DEFAULT_CONF (1)
@@ -329,6 +329,12 @@
 #define FSL_FEATURE_FLEXSPI_SUPPORT_RXCLKSRC_DIFF (1)
 /* @brief FlexSPI AHB RX buffer size (byte) */
 #define FSL_FEATURE_FLEXSPI_AHB_RX_BUFFER_SIZEn(x) (2048)
+/* @brief FlexSPI IPED REGION COUNT */
+#define FSL_FEATURE_FLEXSPI_IPED_REGION_COUNT (15)
+/* @brief FlexSPI Array Length */
+#define FSL_FEATURE_FLEXSPI_ARRAY_LEN (1)
+/* @brief FlexSPI Has ERRATA052733 */
+#define FSL_FEATURE_FLEXSPI_HAS_ERRATA_052733 (1)
 
 /* ADC module features */
 
@@ -433,6 +439,11 @@
 #define FSL_FEATURE_TRNG_HAS_DUAL_OSCILATORS (1)
 /* @brief TRNG supports control pin. */
 #define FSL_FEATURE_TRNG_HAS_CTRL_PIN (1)
+
+/* USART module features */
+
+/* @brief Has FIFO Receive Timeout Configuration (register FIFORXTIMEOUTCFG). */
+#define FSL_FEATURE_USART_HAS_FIFORXTIMEOUTCFG (1)
 
 /* USB module features */
 

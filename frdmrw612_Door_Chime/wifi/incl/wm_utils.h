@@ -1,14 +1,14 @@
 /*
- *  Copyright 2008-2022 NXP
+ *  Copyright 2008-2022, 2024 NXP
  *
  *  SPDX-License-Identifier: BSD-3-Clause
  *
  */
 
-/*! \file wm_utils.h
- * \brief Utility functions
+/*!\file wm_utils.h
+ *\brief This file provides utility functions for Wi-Fi connection manager.
  *
- * Collection of some common helper functions
+ * Utility functions
  */
 
 #ifndef _UTIL_H_
@@ -24,17 +24,6 @@
 #include <strings.h>
 #else
 #include "fsl_debug_console.h"
-#endif
-
-#if CONFIG_WIFI_SMOKE_TESTS
-#if defined(SDK_OS_FREE_RTOS)
-
-#undef PRINTF
-extern void sm_printf(const char *fmt, ...);
-
-#define PRINTF sm_printf
-#elif __ZEPHYR__
-#endif
 #endif
 
 #ifdef __ZEPHYR__

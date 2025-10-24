@@ -1,7 +1,6 @@
 /*
  * Copyright 2024 NXP
  *
- *
  * SPDX-License-Identifier: BSD-3-Clause
  *
  */
@@ -23,13 +22,14 @@
 #include "mcuboot_app_support.h"
 #endif
 
-#if defined(PSA_CRYPTO_DRIVER_THREAD_EN)
-#include "mcux_psa_els_pkc_common_init.h"
-#endif /* defined(PSA_CRYPTO_DRIVER_THREAD_EN) */
+#include "mflash_drv.h"
 
 #if defined(MBEDTLS_THREADING_C) && defined(MBEDTLS_THREADING_ALT)
-#include "mbedtls/threading.h"
+#if defined(PSA_CRYPTO_DRIVER_THREAD_EN)
+#include "mcux_psa_els_pkc_common_init.h"
+#else
 #include "els_pkc_mbedtls.h"
+#endif /* defined(PSA_CRYPTO_DRIVER_THREAD_EN) */
 #endif /* defined(MBEDTLS_THREADING_C) && defined(MBEDTLS_THREADING_ALT) */
 
 //! @addtogroup sbloader
@@ -51,9 +51,6 @@
 /*!
  * @brief load cpu1/cpu2 firmware.
  */
-#define CPU1_CODE_SOURCE (0x08100000U)
-#define CPU2_CODE_SOURCE (0x08200000U)
-
 #define CIU_RST_SW2                (0x41240184U)
 #define CIU_RST_SW2_CPU1_RST_MASK  (0x40000000U)
 #define CIU2_RST_SW3               (0x4424011cU)
@@ -65,6 +62,18 @@
 
 #define SOCCTRL_CHIP_INFO_REV_NUM_MASK (0xFU)
 
+
+#define CLKCTL0_PSCCTL1_OTP_MASK  (0x20000U)
+#define RSTCTL0_PRSTCTL1_OTP_MASK (0x20000U)
+
+#define STAGING_BUF_SZ 256u
+typedef struct sb3_desc {
+    uint32_t fmt;
+    uint32_t sub_fmt;
+    uint32_t dst_addr;
+    uint32_t area_sz;
+} sb3_load_desc_t;
+
 /*******************************************************************************
  * Prototype
  ******************************************************************************/
@@ -73,6 +82,9 @@ static status_t ldr_DoDataRead(fsl_api_core_context_t *ctx);
 static status_t ldr_DoBlock(fsl_api_core_context_t *ctx);
 static status_t ldr_DoLoadCmd(fsl_api_core_context_t *ctx);
 static status_t ldr_DoExecuteCmd(fsl_api_core_context_t *ctx);
+static status_t ldr_ReadFromFlash(uint8_t * buf, uint32_t src_flash_offset, size_t read_sz);
+
+static status_t load_service_monolithic(LOAD_Target_Type loadTarget, uint32_t sourceAddr);
 
 /*******************************************************************************
  * Variables
@@ -115,16 +127,22 @@ static void sb3_DelayUs(uint32_t us)
     sb3_Delay((instNum + 2U) / 3U);
 }
 
+static uint32_t _ActiveApplicationRemapOffset(void)
+{
+    return (MFLASH_FLEXSPI->HADDROFFSET);
+}
 ////////////////////////////////////////////////////////////////////////////
 //! @brief power on device implementation
 ////////////////////////////////////////////////////////////////////////////
 void power_on_device_impl(LOAD_Target_Type loadTarget)
 {
-    if (LOAD_WIFI_FIRMWARE == loadTarget)
+    uint8_t target_type = ((uint8_t)loadTarget & ~0x80);
+
+    if (LOAD_WIFI_FIRMWARE == target_type)
     {
         POWER_PowerOnWlan();
     }
-    else if ((LOAD_BLE_FIRMWARE == loadTarget) || (LOAD_15D4_FIRMWARE == loadTarget))
+    else if ((LOAD_BLE_FIRMWARE == target_type) || (LOAD_15D4_FIRMWARE == target_type))
     {
         POWER_PowerOnBle();
     }
@@ -142,11 +160,13 @@ void power_on_device_impl(LOAD_Target_Type loadTarget)
 ////////////////////////////////////////////////////////////////////////////
 void power_off_device_impl(LOAD_Target_Type loadTarget)
 {
-    if (LOAD_WIFI_FIRMWARE == loadTarget)
+    uint8_t target_type = ((uint8_t)loadTarget & ~0x80);
+
+    if (LOAD_WIFI_FIRMWARE == target_type)
     {
         POWER_PowerOffWlan();
     }
-    else if ((LOAD_BLE_FIRMWARE == loadTarget) || (LOAD_15D4_FIRMWARE == loadTarget))
+    else if ((LOAD_BLE_FIRMWARE == target_type) || (LOAD_15D4_FIRMWARE == target_type))
     {
         POWER_PowerOffBle();
     }
@@ -162,16 +182,18 @@ void power_off_device_impl(LOAD_Target_Type loadTarget)
 ////////////////////////////////////////////////////////////////////////////
 void reset_device(LOAD_Target_Type loadTarget)
 {
-    if (LOAD_WIFI_FIRMWARE == loadTarget)
+    uint8_t target_type = ((uint8_t)loadTarget & ~0x80);
+    if (LOAD_WIFI_FIRMWARE == target_type)
     {
         *((uint32_t *)CIU_RST_SW2) = *((uint32_t *)CIU_RST_SW2) | CIU_RST_SW2_CPU1_RST_MASK;
     }
-    else if ((LOAD_BLE_FIRMWARE == loadTarget) || (LOAD_15D4_FIRMWARE == loadTarget))
+    else if ((LOAD_BLE_FIRMWARE == target_type) || (LOAD_15D4_FIRMWARE == target_type))
     {
         *((uint32_t *)CIU2_RST_SW3) = *((uint32_t *)CIU2_RST_SW3) | CIU2_RST_SW3_CPU2_RST_MASK;
     }
     else
     {
+        ; /* none to do */
     }
 }
 
@@ -194,15 +216,16 @@ static fsl_nboot_status_t nboot_hal_get_secure_firmware_version(uint32_t *fwVer,
     uint32_t trustedFwVersionFuses[4] = {0};
     uint32_t fuseIdxStart;
 
-    if (LOAD_WIFI_FIRMWARE == loadTarget)
+    uint8_t target_type = (uint8_t)loadTarget & ~0x80;
+     if (LOAD_WIFI_FIRMWARE == target_type)
     {
         fuseIdxStart = OTP_WIFI_FW_VER0_FUSE_IDX;
     }
-    else if (LOAD_BLE_FIRMWARE == loadTarget)
+    else if (LOAD_BLE_FIRMWARE == target_type)
     {
         fuseIdxStart = OTP_BLE_FW_VER0_FUSE_IDX;
     }
-    else if (LOAD_15D4_FIRMWARE == loadTarget)
+    else if (LOAD_15D4_FIRMWARE == target_type)
     {
         fuseIdxStart = OTP_15_4_FW_VER0_FUSE_IDX;
     }
@@ -224,9 +247,9 @@ static fsl_nboot_status_t nboot_hal_get_secure_firmware_version(uint32_t *fwVer,
     for (uint32_t i = 0u; i < ARRAY_SIZE(trustedFwVersionFuses); i++)
     {
         // Only the low-half 16-bit is used for counter calculation
-        for (uint32_t j = 0U; j < 16U; j++)
+        for (uint8_t j = 0U; j < 16U; j++)
         {
-            if ((trustedFwVersionFuses[i] & (uint32_t)(1U << j)) != 0U)
+            if ((trustedFwVersionFuses[i] & (uint32_t)((uint32_t)(1U) << j)) != 0U)
             {
                 ++tmpVersion;
             }
@@ -245,6 +268,7 @@ status_t sb3_fw_download_impl(LOAD_Target_Type loadTarget, uint32_t flag, uint32
     volatile uint32_t *magic_pattern_addr = NULL;
     status_t status                       = kStatus_Fail;
     int wait_count                        = 200;
+    uint8_t target_type                   = ((uint8_t)loadTarget & ~0x80);
 
     if ((g_bootloaderTree_v1 == NULL) && ((get_chip_revision() == 1U) || (get_chip_revision() == 2U)))
     {
@@ -259,11 +283,11 @@ status_t sb3_fw_download_impl(LOAD_Target_Type loadTarget, uint32_t flag, uint32
         ; /* none to do */
     }
 
-    if (LOAD_WIFI_FIRMWARE == loadTarget)
+    if (LOAD_WIFI_FIRMWARE == target_type)
     {
         magic_pattern_addr = (volatile uint32_t *)CPU1_MAGIC_PATTERN_ADDR;
     }
-    else if ((LOAD_BLE_FIRMWARE == loadTarget) || (LOAD_15D4_FIRMWARE == loadTarget))
+    else if ((LOAD_BLE_FIRMWARE == target_type) || (LOAD_15D4_FIRMWARE == target_type))
     {
         magic_pattern_addr = (volatile uint32_t *)CPU2_MAGIC_PATTERN_ADDR;
     }
@@ -286,7 +310,14 @@ status_t sb3_fw_download_impl(LOAD_Target_Type loadTarget, uint32_t flag, uint32
         return status;
     }
 
-    status = load_service(loadTarget, sourceAddr);
+    if (loadTarget & 0x80)
+    {
+        status = load_service_monolithic(loadTarget, sourceAddr);
+    }
+    else
+    {
+        status = load_service(loadTarget, sourceAddr);
+    }
 
     // Wait for fw activation for 1s. Return fail if wait_count is used up.
     while (wait_count != 0)
@@ -342,7 +373,7 @@ static status_t ldr_DoLoadCmd(fsl_api_core_context_t *ctx)
     }
     else if (context->data_block_position + context->data_range_header.length <= context->block_data_size)
     {
-        // the load data engough in data section (buffer)
+        // the load data enough in data section (buffer)
         (void)memcpy((uint8_t *)context->data_range_header.startAddress,
                      (uint8_t *)&context->data_block[context->data_block_position], context->data_range_header.length);
         // this load command completed.
@@ -888,6 +919,45 @@ static status_t fsl_sbloader_pump(fsl_api_core_context_t *ctx, uint8_t *data, ui
 }
 
 ////////////////////////////////////////////////////////////////////////////
+//! @brief Read flash area loading to RAM buffer.
+// Direct read from flash is not allowed when remapping is active.
+// buf             : pointer to RAM buffer, its size must be sufficient to receive
+//                   the required number of bytes.
+// src_flash_offset: 'virtual' address in flash relative to start of flash storage.
+//                   Actual 'physical' address results from the addition of the remap offset.
+// read_sz         : Number of bytes to be read.
+////////////////////////////////////////////////////////////////////////////
+static status_t ldr_ReadFromFlash(uint8_t * buf, uint32_t src_flash_offset, size_t read_sz)
+{
+    status_t st;
+    static const uint32_t mflash_base = (1u << 27);
+    uint32_t remap_offset = _ActiveApplicationRemapOffset();
+    if (remap_offset == 0U)
+    {
+        memcpy(buf, (void*)src_flash_offset, read_sz);
+        st = kStatus_Success;
+    }
+    else
+    {
+        // similar to mflash_drv_log2phys
+        uint32_t phys_offset = (src_flash_offset + remap_offset) & ~mflash_base;
+        st = mflash_drv_read(phys_offset, (uint32_t *)buf, read_sz);
+    }
+    return st;
+}
+
+////////////////////////////////////////////////////////////////////////////
+//! @brief Read SB3 area descriptor.
+// Direct read from flash is not allowed when remapping is active.
+// hdr       : pointer to RAM fsl_nboot_sb3_header_t structure.
+// sourceAddr: 'virtual' address where SB3 header is expected.
+////////////////////////////////////////////////////////////////////////////
+status_t read_nboot_sb3_header(fsl_nboot_sb3_header_t * hdr, uint32_t sourceAddr)
+{
+   return ldr_ReadFromFlash((uint8_t*)hdr, sourceAddr, sizeof(fsl_nboot_sb3_header_t));
+}
+
+////////////////////////////////////////////////////////////////////////////
 //! @brief load service with format of sb3
 // readOffset: image offset in flash
 ////////////////////////////////////////////////////////////////////////////
@@ -916,8 +986,8 @@ status_t loader_process_sb_file(uint32_t readOffset)
             RESET_PeripheralReset(kELS_RST_SHIFT_RSTn);
         }
 
-#if ( ( defined(MBEDTLS_THREADING_C) && defined(MBEDTLS_THREADING_ALT) ) || ( defined(PSA_CRYPTO_DRIVER_THREAD_EN) ) )
-        mcux_els_mutex_lock();
+#if defined(MBEDTLS_THREADING_C) && defined(MBEDTLS_THREADING_ALT)
+        (void)mcux_els_mutex_lock();
 #endif
 
         if ((get_chip_revision() == 1U) || (get_chip_revision() == 2U))
@@ -942,7 +1012,8 @@ status_t loader_process_sb_file(uint32_t readOffset)
         // Pump the sbloader content and do sbloader handling until ROM see the jump command and jump to the image
         while (true)
         {
-            (void)memcpy(packetBuf, (uint8_t *)readOffset, packetLength);
+            memcpy(packetBuf, (void*)readOffset, packetLength);
+
             if ((get_chip_revision() == 1U) || (get_chip_revision() == 2U))
             {
                 status = fsl_sbloader_pump(&s_fsl_api_core_context, packetBuf, packetLength);
@@ -1010,16 +1081,15 @@ status_t loader_process_sb_file(uint32_t readOffset)
 
     if (get_chip_revision() == 0U)
     {
-        ELS->ELS_CTRL = (CSS_CTRL_context & 0xFF);
+        ELS->ELS_CTRL = (CSS_CTRL_context & 0xFFU);
     }
 
-#if ( ( defined(MBEDTLS_THREADING_C) && defined(MBEDTLS_THREADING_ALT) ) || ( defined(PSA_CRYPTO_DRIVER_THREAD_EN) ) )
-    mcux_els_mutex_unlock();
+#if defined(MBEDTLS_THREADING_C) && defined(MBEDTLS_THREADING_ALT)
+    (void)mcux_els_mutex_unlock();
 #endif
 
     if (elsFlag == true)
     {
-        elsFlag = false;
         RESET_SetPeripheralReset(kELS_RST_SHIFT_RSTn);
         CLOCK_DisableClock(kCLOCK_ElsApb);
         CLOCK_DisableClock(kCLOCK_Els);
@@ -1036,18 +1106,18 @@ status_t loader_process_sb_file(uint32_t readOffset)
 static status_t loader_process_raw_file(uint32_t readOffset)
 {
     status_t status = kStatus_Fail;
-    uint32_t *src_addr;
-    uint32_t *dst_addr;
+    uint8_t *src_addr;
+    uint8_t *dst_addr;
     uint32_t code_size;
-    uint32_t *data_ptr      = (uint32_t *)readOffset;
+    uint8_t *data_ptr      = (uint8_t *)readOffset;
     uint32_t total_raw_size = 0;
 
 #ifdef CONFIG_FW_VDLLV2
-    if ((*data_ptr == LOADER_RAW_BINARY_FORMAT) && (*(data_ptr + 1) == LOADER_VDLL_RAW_BINARY_FORMAT))
+    if ((*((uint32_t*)data_ptr) == LOADER_RAW_BINARY_FORMAT) && (*((uint32_t*)(data_ptr + 4)) == LOADER_VDLL_RAW_BINARY_FORMAT))
     {
-        src_addr  = data_ptr + 4;
-        dst_addr  = (uint32_t *)*(data_ptr + 2);
-        code_size = *(data_ptr + 3);
+        src_addr  = data_ptr + 16;
+        dst_addr  = (uint8_t *)(*((uint32_t*)(data_ptr + 8)));
+        code_size = *((uint32_t*)(data_ptr + 12));
         (void)memcpy(dst_addr, src_addr, code_size);
         status = kStatus_Success;
     }
@@ -1056,16 +1126,16 @@ static status_t loader_process_raw_file(uint32_t readOffset)
     {
         do
         {
-            if (*data_ptr != LOADER_RAW_BINARY_FORMAT)
-            {
+	    if(*((uint32_t*)data_ptr) != LOADER_RAW_BINARY_FORMAT)
+	    {
                 break;
-            }
+	    }
 
-            src_addr  = data_ptr + 4;
-            dst_addr  = (uint32_t *)*(data_ptr + 2);
-            code_size = *(data_ptr + 3);
+            src_addr  = data_ptr + 16;
+            dst_addr  = (uint8_t *)(*((uint32_t*)(data_ptr + 8)));
+            code_size = *((uint32_t*)(data_ptr + 12));
             // Check for raw ending segment
-            if (((uint32_t)src_addr == 0xffffffffU) || ((uint32_t)dst_addr == 0xffffffffU))
+            if ((uint32_t)src_addr == 0xffffffffU || (uint32_t)dst_addr == 0xffffffffU)
             {
                 if (code_size == total_raw_size)
                 {
@@ -1078,13 +1148,188 @@ static status_t loader_process_raw_file(uint32_t readOffset)
             }
 
             (void)memcpy(dst_addr, src_addr, code_size);
-            data_ptr += 4U + (code_size >> 2U);
+            data_ptr += 16 + code_size;
             total_raw_size += code_size;
         } while (true);
     }
 
     return status;
 }
+
+static status_t loader_process_raw_file_monolithic(uint32_t readOffset)
+{
+    status_t status = kStatus_Fail;
+    uint32_t *dst_addr;
+    uint32_t code_size;
+    uint32_t sz;
+
+
+    uint32_t total_raw_size = 0U;
+    uint8_t staging_buf[STAGING_BUF_SZ] = { 0u };
+
+    do {
+        sb3_load_desc_t *p_desc = (sb3_load_desc_t*)&staging_buf[0];
+        status_t flash_st;
+        /* Firs read the SB3 area descriptor */
+        flash_st = ldr_ReadFromFlash(&staging_buf[0], readOffset, sizeof(sb3_load_desc_t));
+        if (flash_st != kStatus_Success)
+        {
+            break;
+        }
+        readOffset += sizeof(sb3_load_desc_t);
+
+        if (p_desc->fmt != LOADER_RAW_BINARY_FORMAT)
+        {
+            break;
+        }
+
+        dst_addr  = (uint32_t*)p_desc->dst_addr;
+        code_size = p_desc->area_sz;
+
+        // Check for raw ending segment
+        if (p_desc->dst_addr == 0xffffffffU)
+        {
+            if (code_size == total_raw_size)
+            {
+                status = kStatus_Success;
+#ifdef CONFIG_FW_VDLLV2
+                vdll_image_base = readOffset;
+#endif
+            }
+            break;
+        }
+
+        /* start of indirect memcpy to destination */
+        sz = code_size;
+        while (sz >= STAGING_BUF_SZ)
+        {
+            flash_st = ldr_ReadFromFlash(&staging_buf[0], readOffset, STAGING_BUF_SZ);
+            if (flash_st != kStatus_Success)
+            {
+                break;
+            }
+            (void)memcpy(dst_addr, &staging_buf[0], STAGING_BUF_SZ);
+            readOffset += STAGING_BUF_SZ;
+            dst_addr += STAGING_BUF_SZ/4;
+            sz -= STAGING_BUF_SZ;
+        }
+        if (flash_st != kStatus_Success)
+        {
+            break;
+        }
+        /* last chunk smaller than staging buffer */
+        if (sz > 0U)
+        {
+            flash_st = ldr_ReadFromFlash(&staging_buf[0], readOffset, sz);
+            if (flash_st != kStatus_Success)
+            {
+                break;
+            }
+            (void)memcpy(dst_addr, &staging_buf[0], sz);
+            readOffset += sz;
+            dst_addr += (sz+3U)/4U;
+        }
+        /* at this point are is fully consumed and copied to destination : */
+#ifdef CONFIG_FW_VDLLV2
+        if ((p_desc->sub_fmt == LOADER_VDLL_RAW_BINARY_FORMAT))
+        {
+            status = kStatus_Success;
+            break;
+        }
+#endif
+        total_raw_size += code_size;
+
+    } while (true);
+
+    return status;
+}
+
+#ifndef __ZEPHYR__
+static bool __FlexSpiFlashInit(void)
+{
+    bool ret = false;
+    if (((CLKCTL0->PSCCTL0 & CLKCTL0_PSCCTL0_FLEXSPI0_MASK) == 0U) ||
+        ((RSTCTL0->PRSTCTL0 & RSTCTL0_PRSTCTL0_FLEXSPI0_MASK) != 0U))
+    {
+        CLOCK_EnableClock(kCLOCK_Flexspi);
+        RESET_PeripheralReset(kFLEXSPI_RST_SHIFT_RSTn);
+        BOARD_SetFlexspiClock(FLEXSPI, 2U, 2U);
+        BOARD_InitFlash(FLEXSPI);
+        ret = true;
+    }
+    return ret;
+}
+
+static void __FlexSpiFlashDeInit(void)
+{
+    RESET_ClearPeripheralReset(kFLEXSPI_RST_SHIFT_RSTn);
+    BOARD_DeinitFlash(FLEXSPI);
+    CLOCK_AttachClk(kNONE_to_FLEXSPI_CLK);
+    CLOCK_DisableClock(kCLOCK_Flexspi);
+    RESET_SetPeripheralReset(kFLEXSPI_RST_SHIFT_RSTn);
+}
+
+#endif
+
+static int __OtpInit(void)
+{
+    int ret = 0; /* will stay 0 if nothing to do */
+    if (((CLKCTL0->PSCCTL1 & CLKCTL0_PSCCTL1_OTP_MASK) == 0U) ||
+        ((RSTCTL0->PRSTCTL1 & RSTCTL0_PRSTCTL1_OTP_MASK) != 0U))
+    {
+        status_t st;
+#ifdef USE_OCOTP_DRIVER_IN_LOAD_SERVICE
+        st = OCOTP_OtpInit();
+#else
+        if ((get_chip_revision() == 1U) || (get_chip_revision() == 2U))
+        {
+            st = g_bootloaderTree_v1->otpDriver->init(0U);
+        }
+        else
+        {
+            RESET_PeripheralReset(kOTP_RST_SHIFT_RSTn);
+            st = g_bootloaderTree_v0->otpDriver->init(0U);
+        }
+#endif
+        if (st != kStatus_Success)
+        {
+            ret = -1;
+        }
+        else
+        {
+            ret = 1;
+        }
+    }
+    return ret;
+}
+
+static int __OtpDeInit(void)
+{
+    int ret = -1;
+#ifdef USE_OCOTP_DRIVER_IN_LOAD_SERVICE
+        if (OCOTP_OtpDeinit() == kStatus_Success)
+        {
+            ret = 0;
+        }
+#else
+        if ((get_chip_revision() == 1U) || (get_chip_revision() == 2U))
+        {
+            if (g_bootloaderTree_v1->otpDriver->deinit() == kStatus_Success)
+            {
+                ret = 0;
+            }
+        }
+        else
+        {
+            if (g_bootloaderTree_v0->otpDriver->deinit() == kStatus_Success)
+            {
+                ret = 0;
+            }
+        }
+#endif
+    return ret;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////
 //! @brief load service
@@ -1098,19 +1343,9 @@ status_t load_service(LOAD_Target_Type loadTarget, uint32_t sourceAddr)
     fsl_nboot_sb3_header_t *pt_b_ptr;
     fsl_nboot_sb3_header_t *active_pt_ptr;
     uint32_t firmwareVersion = 0xFFFFFFFFU;
-    bool otpFlag             = false;
+    int otp_status           = 0;
 #ifndef __ZEPHYR__
-    bool flexspiFlag         = false;
-
-    if (((CLKCTL0->PSCCTL0 & CLKCTL0_PSCCTL0_FLEXSPI0_MASK) == 0U) ||
-        ((RSTCTL0->PRSTCTL0 & RSTCTL0_PRSTCTL0_FLEXSPI0_MASK) != 0U))
-    {
-        flexspiFlag = true;
-        CLOCK_EnableClock(kCLOCK_Flexspi);
-        RESET_PeripheralReset(kFLEXSPI_RST_SHIFT_RSTn);
-        BOARD_SetFlexspiClock(FLEXSPI, 2U, 2U);
-        BOARD_InitFlash(FLEXSPI);
-    }
+    bool flexspiFlag         = __FlexSpiFlashInit();
 #endif
 
     if (LOAD_WIFI_FIRMWARE == loadTarget)
@@ -1185,30 +1420,10 @@ status_t load_service(LOAD_Target_Type loadTarget, uint32_t sourceAddr)
     }
 #endif
 
-#define CLKCTL0_PSCCTL1_OTP_MASK  (0x20000U)
-#define RSTCTL0_PRSTCTL1_OTP_MASK (0x20000U)
-
-    if (((CLKCTL0->PSCCTL1 & CLKCTL0_PSCCTL1_OTP_MASK) == 0U) ||
-        ((RSTCTL0->PRSTCTL1 & RSTCTL0_PRSTCTL1_OTP_MASK) != 0U))
+    otp_status = __OtpInit();
+    if (otp_status < 0)
     {
-        otpFlag = true;
-#ifdef USE_OCOTP_DRIVER_IN_LOAD_SERVICE
-        status = OCOTP_OtpInit();
-#else
-        if ((get_chip_revision() == 1U) || (get_chip_revision() == 2U))
-        {
-            status = g_bootloaderTree_v1->otpDriver->init(0U);
-        }
-        else
-        {
-            RESET_PeripheralReset(kOTP_RST_SHIFT_RSTn);
-            status = g_bootloaderTree_v0->otpDriver->init(0U);
-        }
-#endif
-        if (status != kStatus_Success)
-        {
-            return kStatus_Fail;
-        }
+        return kStatus_Fail;
     }
 
 #ifdef CONFIG_FW_VDLLV2
@@ -1222,7 +1437,7 @@ status_t load_service(LOAD_Target_Type loadTarget, uint32_t sourceAddr)
 
         // imu init may be called before or after load_service(), not sure user will do in which sequence.
         // If imu init is before load_service(), it is not appropriate do Power-Off here, then comment out Power-Off.
-        // power_off_device_impl(); // tempararily comment out for PDM Non-UPF version
+        // power_off_device_impl(); // temporarily comment out for PDM Non-UPF version
 
         power_on_device_impl(loadTarget);
     }
@@ -1276,23 +1491,99 @@ status_t load_service(LOAD_Target_Type loadTarget, uint32_t sourceAddr)
         status = loader_process_sb_file((uint32_t)active_pt_ptr);
     }
 
-    if (otpFlag)
+    if (otp_status != 0)
     {
-#ifdef USE_OCOTP_DRIVER_IN_LOAD_SERVICE
-        if (OCOTP_OtpDeinit() != kStatus_Success)
+        /* OTP init was done here */
+        (void)__OtpDeInit();
+    }
+
+    if (status == kStatus_Success)
+    {
+        reset_device(loadTarget);
+    }
+
+#ifndef __ZEPHYR__
+    if (flexspiFlag)
+    {
+        __FlexSpiFlashDeInit();
+    }
+#endif
+    return status;
+}
+
+
+static status_t load_service_monolithic(LOAD_Target_Type loadTarget, uint32_t sourceAddr)
+{
+    status_t status = kStatus_Fail;
+    uint32_t hdr_a = 0UL;
+    fsl_nboot_sb3_header_t boot_hdr;
+    fsl_nboot_sb3_header_t *pt_a_ptr = &boot_hdr;
+    uint32_t firmwareVersion = 0xFFFFFFFFU;
+    uint32_t sel_fw_ver;
+    int otp_status           = 0;
+
+    memset(&boot_hdr, 0xff, sizeof(fsl_nboot_sb3_header_t));
+
+#ifndef __ZEPHYR__
+    bool flexspiFlag         = __FlexSpiFlashInit();
+#endif
+    (void)mflash_drv_init();
+    do {
+        status_t ret = kStatus_Fail;
+        if ((LOAD_WIFI_FW_MONOLITHIC != loadTarget) && (LOAD_BLE_FW_MONOLITHIC != loadTarget) && (LOAD_15D4_FW_MONOLITHIC != loadTarget))
         {
-            return kStatus_Fail;
+            break;
         }
-#else
-        if ((get_chip_revision() == 1U) || (get_chip_revision() == 2U))
+        if (sourceAddr == 0UL)
         {
-            (void)g_bootloaderTree_v1->otpDriver->deinit();
+            break;
+        }
+        hdr_a = sourceAddr;
+
+        otp_status = __OtpInit();
+        if (otp_status < 0)
+        {
+            break;
+        }
+
+        if (nboot_hal_get_secure_firmware_version(&firmwareVersion, loadTarget) != kStatus_NBOOT_Success)
+        {
+           break;
+        }
+
+        // imu init may be called before or after load_service(), not sure user will do in which sequence.
+        // If imu init is before load_service(), it is not appropriate do Power-Off here, then comment out Power-Off.
+        // power_off_device_impl(); // temporarily comment out for PDM Non-UPF version
+
+        power_on_device_impl(loadTarget);
+
+        ret = ldr_ReadFromFlash((uint8_t*)pt_a_ptr, hdr_a, sizeof(fsl_nboot_sb3_header_t ));
+        if (ret != kStatus_Success)
+        {
+            break;
+        }
+        /* Check partition TAG and select active partition */
+        if (pt_a_ptr->magic == TAG_SB_V3)
+        {
+            sel_fw_ver = pt_a_ptr->firmwareVersion;
+
+            if (sel_fw_ver < firmwareVersion)
+            {
+                break;
+            }
+            status = loader_process_sb_file(hdr_a);
         }
         else
         {
-            (void)g_bootloaderTree_v0->otpDriver->deinit();
+            status = loader_process_raw_file_monolithic(hdr_a);
         }
-#endif
+
+    } while (false);
+
+    if (otp_status != 0)
+    {
+        /* OTP init was done here so undo it here */
+        (void)__OtpDeInit();
     }
 
     if (status == kStatus_Success)
@@ -1302,12 +1593,7 @@ status_t load_service(LOAD_Target_Type loadTarget, uint32_t sourceAddr)
 #ifndef __ZEPHYR__
     if (flexspiFlag)
     {
-        flexspiFlag = false;
-        RESET_ClearPeripheralReset(kFLEXSPI_RST_SHIFT_RSTn);
-        BOARD_DeinitFlash(FLEXSPI);
-        CLOCK_AttachClk(kNONE_to_FLEXSPI_CLK);
-        CLOCK_DisableClock(kCLOCK_Flexspi);
-        RESET_SetPeripheralReset(kFLEXSPI_RST_SHIFT_RSTn);
+        __FlexSpiFlashDeInit();
     }
 #endif
     return status;

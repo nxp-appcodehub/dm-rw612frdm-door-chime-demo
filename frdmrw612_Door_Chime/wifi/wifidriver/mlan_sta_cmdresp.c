@@ -105,9 +105,18 @@ static mlan_status wlan_ret_mfg_tx_frame(pmlan_private pmpriv, HostCmd_DS_COMMAN
     cfg->short_preamble    = wlan_le32_to_cpu(mcmd->short_preamble);
     cfg->act_sub_ch        = wlan_le32_to_cpu(mcmd->act_sub_ch);
     cfg->short_gi          = wlan_le32_to_cpu(mcmd->short_gi);
+    cfg->adv_coding        = wlan_le32_to_cpu(mcmd->adv_coding);
     cfg->tx_bf             = wlan_le32_to_cpu(mcmd->tx_bf);
     cfg->gf_mode           = wlan_le32_to_cpu(mcmd->gf_mode);
     cfg->stbc              = wlan_le32_to_cpu(mcmd->stbc);
+    cfg->signal_bw         = wlan_le32_to_cpu(mcmd->signal_bw);
+    cfg->NumPkt            = wlan_le32_to_cpu(mcmd->NumPkt);
+    cfg->MaxPE             = wlan_le32_to_cpu(mcmd->MaxPE);
+    cfg->BeamChange        = wlan_le32_to_cpu(mcmd->BeamChange);
+    cfg->Dcm               = wlan_le32_to_cpu(mcmd->Dcm);
+    cfg->Doppler           = wlan_le32_to_cpu(mcmd->Doppler);
+    cfg->MidP              = wlan_le32_to_cpu(mcmd->MidP);
+    cfg->QNum              = wlan_le32_to_cpu(mcmd->QNum);
     memcpy(cfg->bssid, mcmd->bssid, sizeof(cfg->bssid));
 
     LEAVE();
@@ -373,6 +382,7 @@ static mlan_status wlan_ret_802_11_snmp_mib(IN pmlan_private pmpriv,
                     mib->param.dtim_period = ul_temp;
                 }
                 break;
+#if CONFIG_WIFI_FRAG_THRESHOLD
             case FragThresh_i:
                 ul_temp = wlan_le16_to_cpu(*((t_u16 *)(psmib->value)));
                 PRINTM(MINFO, "SNMP_RESP: FragThsd =%u\n", ul_temp);
@@ -381,6 +391,8 @@ static mlan_status wlan_ret_802_11_snmp_mib(IN pmlan_private pmpriv,
                     mib->param.frag_threshold = ul_temp;
                 }
                 break;
+#endif
+#if CONFIG_WIFI_RTS_THRESHOLD
             case RtsThresh_i:
                 ul_temp = wlan_le16_to_cpu(*((t_u16 *)(psmib->value)));
                 PRINTM(MINFO, "SNMP_RESP: RTSThsd =%u\n", ul_temp);
@@ -389,6 +401,7 @@ static mlan_status wlan_ret_802_11_snmp_mib(IN pmlan_private pmpriv,
                     mib->param.rts_threshold = ul_temp;
                 }
                 break;
+#endif
             default:
                 PRINTM(MINFO, "Unexpected snmp_mib oid\n");
                 break;
@@ -835,6 +848,11 @@ mlan_status wlan_ops_sta_process_cmdresp(IN t_void *priv, IN t_u16 cmdresp_no, I
         case HostCmd_CMD_802_11_RF_CHANNEL:
             ret = wlan_ret_802_11_rf_channel(pmpriv, resp, pioctl_buf);
             break;
+#if CONFIG_WPA_SUPP_P2P
+        case HOST_CMD_WIFI_DIRECT_MODE_CONFIG:
+            ret = wlan_ret_wifi_direct_mode(pmpriv, resp, pioctl_buf);
+            break;
+#endif
 #if CONFIG_WMM
         case HostCmd_CMD_WMM_PARAM_CONFIG:
             ret = wlan_ret_wmm_param_config(pmpriv, resp, pioctl_buf);
@@ -845,10 +863,12 @@ mlan_status wlan_ops_sta_process_cmdresp(IN t_void *priv, IN t_u16 cmdresp_no, I
             ret = wlan_ret_subscribe_event(pmpriv, resp, pioctl_buf);
             break;
 #endif
+#if (CONFIG_BG_SCAN)
         case HostCmd_CMD_802_11_BG_SCAN_QUERY:
             ret = wlan_ret_802_11_scan(pmpriv, resp, pioctl_buf);
             PRINTM(MINFO, "CMD_RESP: BG_SCAN result is ready!\n");
             break;
+#endif
 #if CONFIG_RF_TEST_MODE
         case HostCmd_CMD_MFG_COMMAND:
             ret = wlan_ret_mfg(pmpriv, resp, pioctl_buf);

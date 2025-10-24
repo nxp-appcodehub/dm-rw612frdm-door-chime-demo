@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
- * Copyright 2016-2023 NXP
- *
+ * Copyright 2016-2023, 2025 NXP
+ * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -22,7 +22,7 @@
 /*! @name Driver version */
 /*! @{ */
 /*! @brief USART driver version. */
-#define FSL_USART_DRIVER_VERSION (MAKE_VERSION(2, 8, 4))
+#define FSL_USART_DRIVER_VERSION (MAKE_VERSION(2, 8, 5))
 /*! @} */
 
 #define USART_FIFOTRIG_TXLVL_GET(base) (((base)->FIFOTRIG & USART_FIFOTRIG_TXLVL_MASK) >> USART_FIFOTRIG_TXLVL_SHIFT)
@@ -163,7 +163,7 @@ enum _usart_interrupt_enable
  */
 enum _usart_flags
 {
-    kUSART_TxError            = (USART_FIFOSTAT_TXERR_MASK),       /*!< TEERR bit, sets if TX buffer is error */
+    kUSART_TxError            = (USART_FIFOSTAT_TXERR_MASK),       /*!< TXERR bit, sets if TX buffer is error */
     kUSART_RxError            = (USART_FIFOSTAT_RXERR_MASK),       /*!< RXERR bit, sets if RX buffer is error */
     kUSART_TxFifoEmptyFlag    = (USART_FIFOSTAT_TXEMPTY_MASK),     /*!< TXEMPTY bit, sets if TX buffer is empty */
     kUSART_TxFifoNotFullFlag  = (USART_FIFOSTAT_TXNOTFULL_MASK),   /*!< TXNOTFULL bit, sets if TX buffer is not full */
@@ -498,10 +498,8 @@ static inline uint32_t USART_GetStatusFlags(USART_Type *base)
 /*!
  * @brief Clear USART status flags.
  *
- * This function clear supported USART status flags
- * Flags that can be cleared or set are:
- *      kUSART_TxError
- *      kUSART_RxError
+ * This function clear supported USART status flags.
+ * The mask is a logical OR of enumeration members. See @ref kUSART_AllClearFlags.
  * For example:
  * @code
  *     USART_ClearStatusFlags(USART1, kUSART_TxError | kUSART_RxError)
@@ -582,6 +580,8 @@ static inline uint32_t USART_GetEnabledInterrupts(USART_Type *base)
  */
 static inline void USART_EnableTxDMA(USART_Type *base, bool enable)
 {
+    uint32_t globalMask = DisableGlobalIRQ();
+
     if (enable)
     {
         base->FIFOCFG |= USART_FIFOCFG_DMATX_MASK;
@@ -590,6 +590,8 @@ static inline void USART_EnableTxDMA(USART_Type *base, bool enable)
     {
         base->FIFOCFG &= ~(USART_FIFOCFG_DMATX_MASK);
     }
+
+    EnableGlobalIRQ(globalMask);
 }
 
 /*!
@@ -597,6 +599,8 @@ static inline void USART_EnableTxDMA(USART_Type *base, bool enable)
  */
 static inline void USART_EnableRxDMA(USART_Type *base, bool enable)
 {
+    uint32_t globalMask = DisableGlobalIRQ();
+
     if (enable)
     {
         base->FIFOCFG |= USART_FIFOCFG_DMARX_MASK;
@@ -605,6 +609,8 @@ static inline void USART_EnableRxDMA(USART_Type *base, bool enable)
     {
         base->FIFOCFG &= ~(USART_FIFOCFG_DMARX_MASK);
     }
+
+    EnableGlobalIRQ(globalMask);
 }
 
 /*!

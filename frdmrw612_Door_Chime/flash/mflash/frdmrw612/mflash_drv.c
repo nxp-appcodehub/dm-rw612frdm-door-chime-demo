@@ -33,8 +33,8 @@
 #define FLASH_BUSY_STATUS_OFFSET 0
 
 static flexspi_device_config_t deviceconfig = {
-    .flexspiRootClk       = 130000000U,
-    .flashSize            = FLASH_SIZE / 1024, /* flash size in KB */
+    .flexspiRootClk       = 130000000UL,
+    .flashSize            = MFLASH_BSIZE / 1024U, /* flash size in KB */
     .CSIntervalUnit       = kFLEXSPI_CsIntervalUnit1SckCycle,
     .CSInterval           = 2,
     .CSHoldTime           = 3,
@@ -50,7 +50,7 @@ static flexspi_device_config_t deviceconfig = {
     .AHBWriteWaitInterval = 0,
 };
 
-static uint32_t customLUT[CUSTOM_LUT_LENGTH] = {
+const uint32_t customLUT[CUSTOM_LUT_LENGTH] = {
     /* Normal read mode -SDR */
     [4 * NOR_CMD_LUT_SEQ_IDX_READ_NORMAL] =
         FLEXSPI_LUT_SEQ(kFLEXSPI_Command_SDR, kFLEXSPI_1PAD, 0x13, kFLEXSPI_Command_RADDR_SDR, kFLEXSPI_1PAD, 0x20),
@@ -326,7 +326,7 @@ static status_t flexspi_nor_read_data(FLEXSPI_Type *base, uint32_t startAddress,
     flashXfer.dataSize      = length;
 
     status = FLEXSPI_TransferBlocking(base, &flashXfer);
-    
+
     if(status == kStatus_Success)
     {
       status = flexspi_nor_wait_bus_busy(base);
@@ -358,8 +358,11 @@ static int32_t mflash_drv_init_internal(void)
     /* Configure flash settings according to serial flash feature. */
     FLEXSPI_SetFlashConfig(MFLASH_FLEXSPI, &deviceconfig, FLASH_PORT);
 
+    uint32_t tmpLUT[CUSTOM_LUT_LENGTH] = {0x00U};
+
+    memcpy(tmpLUT, customLUT, sizeof(tmpLUT));
     /* Update LUT table. */
-    FLEXSPI_UpdateLUT(MFLASH_FLEXSPI, 0, customLUT, CUSTOM_LUT_LENGTH);
+    FLEXSPI_UpdateLUT(MFLASH_FLEXSPI, 0, tmpLUT, CUSTOM_LUT_LENGTH);
 
     (void)flexspi_nor_enable_quad_mode(MFLASH_FLEXSPI);
 
@@ -418,7 +421,9 @@ static int32_t mflash_drv_sector_erase_internal(uint32_t sector_addr)
 int32_t mflash_drv_sector_erase(uint32_t sector_addr)
 {
     if (0 == mflash_drv_is_sector_aligned(sector_addr))
+    {
         return kStatus_InvalidArgument;
+    }
 
     return mflash_drv_sector_erase_internal(sector_addr);
 }
@@ -482,7 +487,9 @@ static int32_t mflash_drv_read_internal(uint32_t addr, uint32_t *buffer, uint32_
 int32_t mflash_drv_page_program(uint32_t page_addr, uint32_t *data)
 {
     if (0 == mflash_drv_is_page_aligned(page_addr))
+    {
         return kStatus_InvalidArgument;
+    }
 
     return mflash_drv_page_program_internal(page_addr, data);
 }
@@ -491,27 +498,112 @@ int32_t mflash_drv_page_program(uint32_t page_addr, uint32_t *data)
 int32_t mflash_drv_read(uint32_t addr, uint32_t *buffer, uint32_t len)
 {
     /* Check alignment */
-    if (((uint32_t)buffer % 4) || (len % 4))
-        return kStatus_InvalidArgument;
-
-    return mflash_drv_read_internal(addr, buffer, len);
-}
-
-/* API - Get pointer to FLASH region */
-void *mflash_drv_phys2log(uint32_t addr, uint32_t len)
-{
-    /* FLASH starts at MFLASH_BASE_ADDRESS */
-    return (void *)(addr + MFLASH_BASE_ADDRESS);
-}
-
-/* API - Get pointer to FLASH region */
-uint32_t mflash_drv_log2phys(void *ptr, uint32_t len)
-{
-    if ((uint32_t)ptr < MFLASH_BASE_ADDRESS)
+    if ((((uint32_t)buffer % 4U) != 0U) || ((len % 4U) != 0U))
     {
         return kStatus_InvalidArgument;
     }
 
-    /* FLASH starts at MFLASH_BASE_ADDRESS */
-    return ((uint32_t)ptr - MFLASH_BASE_ADDRESS);
+    return mflash_drv_read_internal(addr, buffer, len);
+}
+
+/* Returns pointer (AHB address) to memory area where the specified region of FLASH is mapped, NULL on failure (could
+ * not map continuous block) */
+void * mflash_drv_phys2log(uint32_t addr, uint32_t len)
+{
+   /* take FLEXSPI remapping into account */
+    uint32_t remap_offset = MFLASH_REMAP_OFFSET();
+    uint32_t remap_start  = MFLASH_REMAP_START();
+    uint32_t remap_end    = MFLASH_REMAP_END();
+    uint32_t bus_addr;
+
+    do {
+        if (addr >= MFLASH_BSIZE)
+        {
+            bus_addr = 0UL;
+            break;
+        }
+        /* calculate the bus address where the requested FLASH region is expected to be available */
+        bus_addr = addr + MFLASH_BASE_ADDRESS;
+
+        if((remap_offset == 0UL) || (remap_end <= remap_start))
+        {
+            /* remapping is not active */
+            break;
+        }
+
+        if((remap_start >= bus_addr + len) || (remap_end <= bus_addr))
+        {
+            /* remapping window does not collide with bus addresses normally assigned for requested range of FLASH */
+            break;
+        }
+
+        if((remap_start + remap_offset <= bus_addr) && (remap_end + remap_offset >= bus_addr + len))
+        {
+            /* remapping window covers the whole requested range of FLASH, return address adjusted by negative offset */
+            bus_addr -=  remap_offset;
+            break;
+        }
+        bus_addr = 0UL;
+        /* the bus address region normally assigned for requested range of FLASH is partially or completely shadowed by
+        * remapping, fail */
+
+    } while (false);
+
+    return (void *)bus_addr;
+}
+
+/* Returns address of physical memory where the area accessible by given pointer is actually stored, UINT32_MAX on
+ * failure (could not map as continuous block) */
+uint32_t mflash_drv_log2phys(void *ptr, uint32_t len)
+{
+   /* take FLEXSPI remapping into account */
+    uint32_t remap_offset = MFLASH_REMAP_OFFSET();
+    uint32_t remap_start  = MFLASH_REMAP_START();
+    uint32_t remap_end    = MFLASH_REMAP_END();
+    uint32_t ret = UINT32_MAX;
+
+    /* calculate the bus address where the requested FLASH region is expected to be available */
+    do {
+        uint32_t bus_addr = (uint32_t)ptr;
+
+        if(bus_addr < MFLASH_BASE_ADDRESS)
+        {
+            /* the pointer points outside of the flash memory area */
+            break;
+        }
+
+        ret = (bus_addr - MFLASH_BASE_ADDRESS);
+
+        if (ret >= MFLASH_BSIZE)
+        {
+            /* the pointer points beyond the flash memory area */
+            ret = UINT32_MAX;
+            break;
+        }
+
+        if((remap_offset == 0UL) || (remap_end <= remap_start))
+        {
+            /* remapping is not active */
+            break;
+        }
+
+        if((remap_start >= bus_addr + len) || (remap_end <= bus_addr))
+        {
+            /* remapping window does not affect the requested memory area */
+            break;
+        }
+
+        if((remap_start <= bus_addr) && (remap_end >= bus_addr + len))
+        {
+            /* remapping window covers the whole address range, return address adjusted by offset */
+            ret += remap_offset;
+            break;
+        }
+
+        ret = UINT32_MAX;
+        /* the bus address region partially collides with the remapping window, hence the range is not mapped to continuous
+         * block in the FLASH, fail */
+    } while (false);
+
+    return ret;
 }

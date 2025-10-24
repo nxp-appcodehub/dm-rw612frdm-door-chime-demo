@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
  * Copyright 2016-2023 NXP
- *
+ * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -58,7 +58,7 @@ uint32_t USART_GetInstance(USART_Type *base)
 
     for (i = 0; i < (uint32_t)FSL_FEATURE_SOC_USART_COUNT; i++)
     {
-        if ((uint32_t)base == s_usartBaseAddrs[i])
+        if (MSDK_REG_SECURE_ADDR((uint32_t)base) == MSDK_REG_SECURE_ADDR(s_usartBaseAddrs[i]))
         {
             break;
         }

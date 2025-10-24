@@ -1,7 +1,6 @@
 /*
  * Copyright 2016, 2022,2024 NXP
  *
- *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -19,6 +18,9 @@ typedef enum
 #ifdef CONFIG_FW_VDLLV2
     LOAD_WIFI_VDLL_FIRMWARE,
 #endif
+    LOAD_WIFI_FW_MONOLITHIC = 0x81,
+    LOAD_BLE_FW_MONOLITHIC  = 0x82,
+    LOAD_15D4_FW_MONOLITHIC = 0x83,
     LOAD_TYPE_MAX,
 } LOAD_Target_Type;
 

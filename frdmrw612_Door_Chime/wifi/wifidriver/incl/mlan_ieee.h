@@ -3,7 +3,7 @@
  *  @brief This file contains IEEE information element related
  *  definitions used in MLAN and MOAL module.
  *
- *  Copyright 2008-2021, 2023 NXP
+ *  Copyright 2008-2021, 2023-2025 NXP
  *
  *  SPDX-License-Identifier: BSD-3-Clause
  *
@@ -88,7 +88,9 @@ typedef MLAN_PACK_START enum _IEEEtypes_ElementId_e {
     DTIM_PARAM_SET = 5,
     IBSS_PARAM_SET = 6,
 
+#ifdef STA_SUPPORT
     COUNTRY_INFO = 7,
+#endif /* STA_SUPPORT */
 
     POWER_CONSTRAINT   = 32,
     POWER_CAPABILITY   = 33,
@@ -124,12 +126,18 @@ typedef MLAN_PACK_START enum _IEEEtypes_ElementId_e {
 #if CONFIG_11K
     RRM_ENABLED_CAP = 70,
 #endif
+#if CONFIG_MULTI_BSSID_SUPPORT
     MULTI_BSSID = 71,
+#endif
     BSSCO_2040          = 72,
     OVERLAPBSSSCANPARAM = 74,
+#if CONFIG_MULTI_BSSID_SUPPORT
     NONTX_BSSID_CAP = 83,
+#endif
 
+#if CONFIG_MULTI_BSSID_SUPPORT
     MBSSID_INDEX = 85,
+#endif
     EXT_CAPABILITY = 127,
 
     /* ERP_INFO = 42, */
@@ -155,6 +163,7 @@ typedef MLAN_PACK_START enum _IEEEtypes_ElementId_e {
 
     WPS_IE = VENDOR_SPECIFIC_221,
 
+    P2P_IE    = VENDOR_SPECIFIC_221,
     WPA_IE    = VENDOR_SPECIFIC_221,
     RSN_IE    = 48,
     VS_IE     = VENDOR_SPECIFIC_221,
@@ -397,6 +406,7 @@ typedef MLAN_PACK_START struct _IEEEtypes_CapInfo_t
     t_u8 immediate_block_ack : 1;
 } MLAN_PACK_END IEEEtypes_CapInfo_t, *pIEEEtypes_CapInfo_t;
 
+#if CONFIG_MULTI_BSSID_SUPPORT
 /** IEEEtypes_Ssid_t */
 typedef MLAN_PACK_START struct _IEEEtypes_Ssid_t
 {
@@ -407,6 +417,7 @@ typedef MLAN_PACK_START struct _IEEEtypes_Ssid_t
     /** ssid */
     t_u8 ssid[MLAN_MAX_SSID_LENGTH];
 } MLAN_PACK_END IEEEtypes_Ssid_t, *pIEEEtypes_Ssid_t;
+#endif
 
 /** IEEEtypes_CfParamSet_t */
 typedef MLAN_PACK_START struct _IEEEtypes_CfParamSet_t
@@ -516,6 +527,20 @@ typedef t_u16 IEEEtypes_AId_t;
 /** IEEEtypes_StatusCode_t */
 typedef t_u16 IEEEtypes_StatusCode_t;
 
+/** IEEEtypes_StatusCode_e */
+typedef MLAN_PACK_START enum _IEEEtypes_StatusCode_e
+{
+    IEEE_STATUS_CODE_SUCCESS                   = 0,
+    IEEE_STATUS_CODE_REASON_UNSPECIFIED        = 1,
+    IEEE_STATUS_CODE_DENIED_OTHER_REASON       = 12,
+    IEEE_STATUS_CODE_POOR_CHANNEL_CONDITIONS   = 34,
+    IEEE_STATUS_CODE_REQUEST_DECLINED          = 37,
+    IEEE_STATUS_CODE_INVALID_PARAMETERS        = 38,
+    IEEE_STATUS_CODE_INVALID_RSNE_CAPABILITIES = 45,
+    IEEE_STATUS_CODE_TRANSMISSION_FAILURE      = 79,
+}MLAN_PACK_END IEEEtypes_StatusCode_e;
+
+#if CONFIG_HOST_MLME
 /** IEEEtypes_SeqCtl_t */
 typedef MLAN_PACK_START struct _IEEEtypes_SeqCtl_t
 {
@@ -541,6 +566,7 @@ typedef MLAN_PACK_START struct _IEEEtypes_MgmtHdr_t
     /** IEEEtypes_SeqCtl_t */
     IEEEtypes_SeqCtl_t SeqCtl;
 } MLAN_PACK_END IEEEtypes_MgmtHdr_t;
+#endif
 
 /** IEEEtypes_AssocRsp_t */
 typedef MLAN_PACK_START struct _IEEEtypes_AssocRsp_t
@@ -583,15 +609,19 @@ typedef t_u8 WLAN_802_11_RATES[WLAN_SUPPORTED_RATES];
 #define RSN_AKM_PSK 2
 /** AKM: FT PSK */
 #define RSN_AKM_FT_PSK 4
+/** AKM: 8021x_SHA256 */
+#define RSN_AKM_8021X_SHA256 5
 /** AKM: PSK SHA256 */
 #define RSN_AKM_PSK_SHA256 6
 
+#if UAP_HOST_MLME
 /** AKM: SAE SHA256 */
 #define RSN_AKM_SAE 8
 /** AKM: FT SAE SHA256 */
 #define RSN_AKM_FT_SAE 9
 /** AKM: OWE SHA256 */
 #define RSN_AKM_OWE 18
+#endif
 
 #if defined(STA_SUPPORT) && defined(ENABLE_802_11W) && defined(EMBEDDED_SUPPLICANT)
 /** Pairwise Cipher Suite length */
@@ -605,6 +635,30 @@ typedef t_u8 WLAN_802_11_RATES[WLAN_SUPPORTED_RATES];
 /** PMF ORing mask */
 #define PMF_MASK 0x00c0
 #endif
+
+/** RSN Override IE to RSN IE offset of suite position
+ *  RSN Override IE has 3 Bytes WFA OUI and 1 Byte OUI type
+ *  more than RSN IE
+ */
+#define MLAN_RSNO_SUITE_OFFSET 4
+
+/** Enumeration for RSN Override oui type */
+typedef enum _mlan_rsno_oui_type
+{
+    MLAN_OUI_TYPE_RSNO = 0x29,
+    MLAN_OUI_TYPE_RSNO2 = 0x2a,
+    MLAN_OUI_TYPE_RSNXO = 0x2b,
+    MLAN_OUI_TYPE_RSN_SEL = 0x2c
+} mlan_rsno_oui_type;
+
+/** Enumeration for RSN Override Selector */
+typedef enum _mlan_rsn_selector
+{
+    MLAN_RSN_SELECTOR_RSN = 0,
+    MLAN_RSN_SELECTOR_RSNO,
+    MLAN_RSN_SELECTOR_RSNO2,
+    MLAN_RSN_SELECTOR_INVALID = 0xFF,
+} mlan_rsn_selector;
 
 /** wpa_suite_t */
 typedef MLAN_PACK_START struct _wpa_suite_t
@@ -649,6 +703,32 @@ typedef MLAN_PACK_START struct _IEEEtypes_Rsnx_t
     /** Rsnx : data */
     t_u8 data[1];
 } MLAN_PACK_END IEEEtypes_Rsnx_t, *pIEEEtypes_Rsnx_t;
+
+/** IEEEtypes_Rsnxo_t */
+typedef MLAN_PACK_START struct _IEEEtypes_Rsnxo_t
+{
+    /** Generic IE header */
+    IEEEtypes_Header_t ieee_hdr;
+    /** Rsnxo : wfa oui */
+    t_u8 wfa_oui[3];
+    /** Rsnxo : vendor type */
+    t_u8 vendor_type;
+    /** Rsnxo : data */
+    t_u8 data[1];
+} MLAN_PACK_END IEEEtypes_Rsnxo_t, *pIEEEtypes_Rsnxo_t;
+
+/** IEEEtypes_RsnSelector_t */
+typedef MLAN_PACK_START struct _IEEEtypes_RsnSelector_t
+{
+    /** Generic IE header */
+    IEEEtypes_Header_t ieee_hdr;
+    /** RsnSelector : wfa oui */
+    t_u8 wfa_oui[3];
+    /** RsnSelector : vendor type */
+    t_u8 vendor_type;
+    /** RsnSelector : Selector of RSN IEs, 0: RSNE, 1: RSNO, 2: RSNO2 */
+    t_u8 selector;
+} MLAN_PACK_END IEEEtypes_RsnSelector_t, *pIEEEtypes_RsnSelector_t;
 
 /** IEEEtypes_Wpa_t */
 typedef MLAN_PACK_START struct _IEEEtypes_Wpa_t
@@ -993,6 +1073,8 @@ typedef MLAN_PACK_START union
 
 /** action code for 20/40 BSS Coexsitence Management frame */
 #define BSS_20_40_COEX 0
+/** action code for FILS Discovery Management frame */
+#define FILS_DISCOVERY 34
 
 /** Data structure for subband set */
 typedef MLAN_PACK_START struct _IEEEtypes_SubbandSet_t
@@ -1005,6 +1087,7 @@ typedef MLAN_PACK_START struct _IEEEtypes_SubbandSet_t
     t_u8 max_tx_pwr;
 } MLAN_PACK_END IEEEtypes_SubbandSet_t, *pIEEEtypes_SubbandSet_t;
 
+#ifdef STA_SUPPORT
 /** Data structure for Country IE */
 typedef MLAN_PACK_START struct _IEEEtypes_CountryInfoSet_t
 {
@@ -1031,6 +1114,7 @@ typedef MLAN_PACK_START struct _IEEEtypes_CountryInfoFullSet_t
     IEEEtypes_SubbandSet_t sub_band[MRVDRV_MAX_SUBBAND_802_11D];
 } MLAN_PACK_END IEEEtypes_CountryInfoFullSet_t, *pIEEEtypes_CountryInfoFullSet_t;
 
+#endif /* STA_SUPPORT */
 
 /** HT Capabilities Data */
 typedef MLAN_PACK_START struct _HTCap_t
@@ -1200,6 +1284,7 @@ typedef MLAN_PACK_START struct _IEEEtypes_HTInfo_t
     HTInfo_t ht_info;
 } MLAN_PACK_END IEEEtypes_HTInfo_t, *pIEEEtypes_HTInfo_t;
 
+#if CONFIG_MULTI_BSSID_SUPPORT
 /** the AP which send the multi_bssid IE */
 #define MULTI_BSSID_AP 1
 /** the AP which don't send beacon */
@@ -1250,6 +1335,7 @@ typedef MLAN_PACK_START struct _IEEEtypes_MultiBSSID_t
     /** Optional Subelement data*/
     t_u8 sub_elem_data[];
 } MLAN_PACK_END IEEEtypes_MultiBSSID_t, *pIEEEtypes_MultiBSSID_t;
+#endif
 
 /** 20/40 BSS Coexistence IE */
 typedef MLAN_PACK_START struct _IEEEtypes_2040BSSCo_t
@@ -1636,13 +1722,14 @@ typedef struct
 
     IEEEtypes_PowerConstraint_t power_constraint; /**< Power Constraint IE */
     IEEEtypes_PowerCapability_t power_capability; /**< Power Capability IE */
-    IEEEtypes_TPCReport_t tpc_report;             /**< TPC Report IE */
+    IEEEtypes_TPCReport_t tpc_report_ie;          /**< TPC Report IE */
     IEEEtypes_ChanSwitchAnn_t chan_switch_ann;    /**< Channel Switch Announcement IE */
     IEEEtypes_Quiet_t quiet;                      /**< Quiet IE */
     IEEEtypes_IBSS_DFS_t ibss_dfs;                /**< IBSS DFS Element IE */
 
 } wlan_11h_bss_info_t;
 
+#ifdef STA_SUPPORT
 /** Macro for maximum size of scan response buffer */
 #define MAX_SCAN_RSP_BUF (16 * 1024)
 
@@ -1650,7 +1737,7 @@ typedef struct
 #define WLAN_USER_SCAN_CHAN_MAX 50U
 
 /** Maximum length of SSID list */
-#define MRVDRV_MAX_SSID_LIST_LENGTH 2
+#define MRVDRV_MAX_SSID_LIST_LENGTH 10
 
 /** Scan all the channels in specified band */
 #define BAND_SPECIFIED 0x80U
@@ -1689,6 +1776,7 @@ typedef MLAN_PACK_START struct _wlan_user_scan_chan
     t_u32 scan_time;
 } MLAN_PACK_END wlan_user_scan_chan;
 
+#if CONFIG_SCAN_CHANNEL_GAP
 /** channel statictics */
 typedef MLAN_PACK_START struct _ChanStatistics_t
 {
@@ -1711,6 +1799,7 @@ typedef MLAN_PACK_START struct _ChanStatistics_t
     /** max rssi */
     t_u8 max_rss;
 } MLAN_PACK_END ChanStatistics_t;
+#endif
 
 /**
  *  Input structure to configure an immediate scan cmd to firmware
@@ -1765,9 +1854,12 @@ typedef MLAN_PACK_START struct
      *  Variable number (fixed maximum) of channels to scan up
      */
     wlan_user_scan_chan chan_list[WLAN_USER_SCAN_CHAN_MAX];
+#if CONFIG_SCAN_CHANNEL_GAP
     /** scan channel gap */
     t_u16 scan_chan_gap;
+#endif
 } MLAN_PACK_END wlan_user_scan_cfg;
+#if CONFIG_BG_SCAN
 /** Default scan interval in millisecond*/
 #define DEFAULT_BGSCAN_INTERVAL 30000
 
@@ -1799,6 +1891,7 @@ typedef MLAN_PACK_START struct
 #define MIN_BGSCAN_INTERVAL 30000
 /** default repeat count */
 #define DEF_REPEAT_COUNT 6
+#endif
 
 /** default rssi low threshold */
 #define DEFAULT_RSSI_LOW_THRESHOLD 70
@@ -1808,8 +1901,10 @@ typedef MLAN_PACK_START struct
 #define LOWEST_RSSI_THRESHOLD 82
 /** delta rssi */
 #define DELTA_RSSI 10
+#if CONFIG_SCAN_CHANNEL_GAP
 /** Scan channel gap */
 #define SCAN_CHANNEL_GAP_VALUE 50U
+#endif
 #if CONFIG_11AX
 typedef MLAN_PACK_START struct _IEEEtypes_Extension_t
 {
@@ -1843,6 +1938,68 @@ typedef MLAN_PACK_START struct _IEEEtypes_HECap_t
     t_u8 he_txrx_mcs_support[4];
     /** PPE Thresholds (optional) */
 } MLAN_PACK_END IEEEtypes_HECap_t, *pIEEEtypes_HECap_t;
+
+typedef MLAN_PACK_START struct _IEEEtypes_HeOpParam_t {
+    /** Default PE Duration */
+    t_u16 default_pe_dur : 3;                       /* bit 0-2 */
+    /** TWT Required */
+    t_u16 twt_req : 1;                              /* bit 3 */
+    /** TXOP Duration RTS Threshold */
+    t_u16 txop_dur_rts_threshold : 10;              /* bit 4-13 */
+    /** VHT Operation Info Present */
+    t_u16 vht_op_info_present : 1;                  /* bit 14 */
+    /** Co-Hosted BSS */
+    t_u16 co_located_bss : 1;                       /* bit 15 */
+    /** ER SU Disable */
+    t_u8  er_su_disable : 1;                        /* bit 16 */
+    /* 6g operation info present */
+    t_u8  he_6g_op_info_present :1;                 /* bit 17 */
+    /** Reserved bit 18-23 */
+    t_u8  reserved : 6;                             /* bit 18-23 */
+} MLAN_PACK_END IEEEtypes_HeOpParam_t;
+
+typedef MLAN_PACK_START struct _IEEEtypes_HeBssColorInfo_t {
+    /** BSS Color */
+    t_u8 bss_color : 6;                             /* bit 0-5 */
+    /** Partial BSS Color */
+    t_u8 partial_bss_color : 1;                     /* bit 6 */
+    /** BSS Color Disabled */
+    t_u8 bss_color_disabled : 1;                    /* bit 7 */
+} MLAN_PACK_END IEEEtypes_HeBssColorInfo_t;
+
+typedef MLAN_PACK_START struct _IEEEtypes_HeMcsMap_t {
+    /** Max HE-MAC for 1 SS */
+    t_u8 max_mcs_1ss: 2;
+    /** Max HE-MAC for 2 SS */
+    t_u8 max_mcs_2ss: 2;
+    /** Max HE-MAC for 3 SS */
+    t_u8 max_mcs_3ss: 2;
+    /** Max HE-MAC for 4 SS */
+    t_u8 max_mcs_4ss: 2;
+    /** Max HE-MAC for 5 SS */
+    t_u8 max_mcs_5ss: 2;
+    /** Max HE-MAC for 6 SS */
+    t_u8 max_mcs_6ss: 2;
+    /** Max HE-MAC for 7 SS */
+    t_u8 max_mcs_7ss: 2;
+    /** Max HE-MAC for 8 SS */
+    t_u8 max_mcs_8ss: 2;
+} MLAN_PACK_END IEEEtypes_HeMcsMap_t, *pIEEEtypes_HeMcsMap_t;
+
+typedef MLAN_PACK_START struct _IEEEtypes_HeOp_t {
+    /** Generic IE header */
+    IEEEtypes_Header_t ieee_hdr;
+    /** Element id extension */
+    t_u8 ext_id;
+    /** HE Operation Parameters */
+    IEEEtypes_HeOpParam_t           he_op_param;
+    /** BSS Color Info */
+    IEEEtypes_HeBssColorInfo_t      bss_color_info;
+    /** Basic HE-MCS and NSS Set */
+    IEEEtypes_HeMcsMap_t            basic_he_mcs_nss;
+    /** Optional Field, including VHT Operation Info Max Co-Hosted BSSID Indicator, and 6Ghz Operation Info  */
+    t_u8 option[9];
+} MLAN_PACK_END IEEEtypes_HeOp_t;
 #endif
 
 /** MBO IE header */
@@ -1936,6 +2093,7 @@ typedef MLAN_PACK_START enum _IEEEtypes_RRM_ActionFieldType_e {
 } MLAN_PACK_END IEEEtypes_RRM_ActionFieldType_e;
 #endif
 
+#if CONFIG_BG_SCAN
 /**
  *  Input structure to configure bs scan cmd to firmware
  */
@@ -1974,9 +2132,13 @@ typedef MLAN_PACK_START struct
     wlan_user_scan_ssid ssid_list[MRVDRV_MAX_SSID_LIST_LENGTH];
     /** Variable number (fixed maximum) of channels to scan up */
     wlan_user_scan_chan chan_list[WLAN_BG_SCAN_CHAN_MAX];
+#if CONFIG_SCAN_CHANNEL_GAP
     /** scan channel gap */
     t_u16 scan_chan_gap;
+#endif
 } MLAN_PACK_END wlan_bgscan_cfg;
+#endif /* ROAMING */
+#endif /* STA_SUPPORT */
 
 #ifdef PRAGMA_PACK
 #pragma pack(pop)
@@ -2023,10 +2185,12 @@ typedef struct _BSSDescriptor_t
     /** Receive signal strength in dBm */
     t_s32 rssi;
 
+#if CONFIG_SCAN_CHANNEL_GAP
     /** channel load */
     t_u16 chan_load;
     /** channel load */
     t_u16 chan_noise;
+#endif
 
     /** Channel */
     t_u8 channel;
@@ -2107,10 +2271,12 @@ typedef struct _BSSDescriptor_t
     IEEEtypes_HTInfo_t *pht_info;
     /** HT Information Offset */
     /* t_u16 ht_info_offset; */
+#if CONFIG_MULTI_BSSID_SUPPORT
     /** Flag to indicate this is multi_bssid_ap */
     t_u8 multi_bssid_ap;
     /** the mac address of multi-bssid AP */
     mlan_802_11_mac_addr multi_bssid_ap_addr;
+#endif
     /** 20/40 BSS Coexistence IE */
     IEEEtypes_2040BSSCo_t *pbss_co_2040;
     /** VHT Capabilities IE */
@@ -2134,8 +2300,10 @@ typedef struct _BSSDescriptor_t
     /** Overlapping BSS Scan Parameters Offset */
     t_u16 overlap_bss_offset;
 
+#ifdef STA_SUPPORT
     /** Country information set */
     IEEEtypes_CountryInfoFullSet_t country_info;
+#endif /* STA_SUPPORT */
 
     /** WPA IE */
     IEEEtypes_VendorSpecific_t *pwpa_ie;
@@ -2143,12 +2311,18 @@ typedef struct _BSSDescriptor_t
     t_u16 wpa_offset;
     /** RSN IE */
     IEEEtypes_Generic_t *prsn_ie;
-    /** RSN IE offset in the beacon buffer */
-    t_u16 rsn_offset;
+#if !CONFIG_WPA_SUPP
+    /** RSN Override IE */
+    IEEEtypes_Generic_t *prsno_ie;
+    /** RSN Override 2 IE */
+    IEEEtypes_Generic_t *prsno2_ie;
+#endif
+#ifdef STA_SUPPORT
     /** WAPI IE */
     IEEEtypes_Generic_t *pwapi_ie;
     /** WAPI IE offset in the beacon buffer */
     t_u16 wapi_offset;
+#endif
 
     /** Pointer to the returned scan response */
     t_u8 *pbeacon_buf;
@@ -2189,9 +2363,11 @@ typedef struct _BSSDescriptor_t
     /** HE Capability IE offset */
     t_u16 he_cap_offset;
     /** HE operation IE */
-    IEEEtypes_Extension_t *phe_oprat;
+    IEEEtypes_HeOp_t *phe_oprat;
     /** HE operation IE offset */
     t_u16 he_oprat_offset;
+    IEEEtypes_HECap_t he_cap_saved;
+    IEEEtypes_HeOp_t he_oprat_saved;
 #endif
     /*
       fixme: The legacy code used IEEEtypes_RSN_IE_t which is of 24
@@ -2202,8 +2378,14 @@ typedef struct _BSSDescriptor_t
     */
     unsigned char wpa_ie_buff[MLAN_WMSDK_MAX_WPA_IE_LEN];
     size_t wpa_ie_buff_len;
-    unsigned char rsn_ie_buff[MLAN_WMSDK_MAX_WPA_IE_LEN];
+    unsigned char rsn_ie_buff[MLAN_RSN_MAX_IE_LEN];
     size_t rsn_ie_buff_len;
+#if !CONFIG_WPA_SUPP
+    unsigned char rsno_ie_buff[MLAN_WMSDK_MAX_WPA_IE_LEN];
+    size_t rsno_ie_buff_len;
+    unsigned char rsno2_ie_buff[MLAN_WMSDK_MAX_WPA_IE_LEN];
+    size_t rsno2_ie_buff_len;
+#endif
 
     bool wps_IE_exist;
     t_u16 wps_session;
@@ -2212,8 +2394,11 @@ typedef struct _BSSDescriptor_t
     /** RSNX IE */
     IEEEtypes_Rsnx_t *prsnx_ie;
     IEEEtypes_Rsnx_t rsnx_ie_saved;
-    /** RSNX IE offset in the beacon buffer */
-    t_u16 rsnx_offset;
+#if !CONFIG_WPA_SUPP
+    /** RSNX Override IE */
+    IEEEtypes_Rsnxo_t *prsnxo_ie;
+    IEEEtypes_Rsnxo_t rsnxo_ie_saved;
+#endif
 
     bool brcm_ie_exist;
     bool epigram_ie_exist;

@@ -6,9 +6,9 @@
 /* By expressly accepting such terms or by downloading, installing,         */
 /* activating and/or otherwise using the software, you are agreeing that    */
 /* you have read, and that you agree to comply with and are bound by, such  */
-/* license terms. If you do not agree to be bound by the applicable license */
-/* terms, then you may not retain, install, activate or otherwise use the   */
-/* software.                                                                */
+/* license terms.  If you do not agree to be bound by the applicable        */
+/* license terms, then you may not retain, install, activate or otherwise   */
+/* use the software.                                                        */
 /*--------------------------------------------------------------------------*/
 
 #ifndef COMPILER_TOOLCHAIN_H_
@@ -17,7 +17,7 @@
 /* for armclang */
 #if defined (__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050)
     #define CSS_IDATA_SEGMENT __attribute__((section("CSS_IDATA_SEGMENT")))
-    #define CSS_CONST_SEGMENT __attribute__((section("CSS_CONST_SEGMENT_SECTION")))
+    #define CSS_CONST_SEGMENT __attribute__((section("CSS_CONST_SEGMENT")))
     #define MCUX_FUP_ATTRIBUTE __attribute__((aligned(4))) __attribute__((section("MCUX_OBFUSCATED_FUP_SEGMENT")))
     #define UNUSED_PARAM __attribute__((unused))
     /*  

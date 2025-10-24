@@ -1,10 +1,35 @@
+/*
+ * FreeRTOS Kernel V11.0.1
+ * Copyright (C) 2021 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ * Copyright 2024-2025 NXP
+ *
+ * SPDX-License-Identifier: MIT
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * https://www.FreeRTOS.org
+ * https://github.com/FreeRTOS
+ *
+ */
+
 /** @file osa_freertos.c
  *
  *  @brief OS FreeRTOS interaction APIs
- *
- *  Copyright 2023 NXP
- *
- *  SPDX-License-Identifier: BSD-3-Clause
  *
  */
 #include <inttypes.h>
@@ -303,7 +328,10 @@ osa_status_t OSA_TimerDestroy(osa_timer_handle_t timerHandle)
 }
 
 void (*g_os_tick_hooks[MAX_CUSTOM_HOOKS])(void) = {NULL};
+
+#if !CONFIG_COEX_APP
 void (*g_os_idle_hooks[MAX_CUSTOM_HOOKS])(void) = {NULL};
+#endif
 
 /** The FreeRTOS Tick hook function. */
 void vApplicationTickHook(void)
@@ -319,6 +347,7 @@ void vApplicationTickHook(void)
     }
 }
 
+#if !CONFIG_COEX_APP
 void vApplicationIdleHook(void)
 {
     int i;
@@ -359,6 +388,7 @@ int OSA_SetupIdleFunction(void (*func)(void))
 
     return WM_SUCCESS;
 }
+#endif
 
 int OSA_SetupTickFunction(void (*func)(void))
 {
@@ -389,6 +419,7 @@ int OSA_SetupTickFunction(void (*func)(void))
     return WM_SUCCESS;
 }
 
+#if !CONFIG_COEX_APP
 int OSA_RemoveIdleFunction(void (*func)(void))
 {
     unsigned int i;
@@ -409,6 +440,7 @@ int OSA_RemoveIdleFunction(void (*func)(void))
 
     return WM_SUCCESS;
 }
+#endif
 
 int OSA_RemoveTickFunction(void (*func)(void))
 {
